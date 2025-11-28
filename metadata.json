@@ -1,0 +1,5 @@
+{
+  "name": "SubCine Studio",
+  "description": "A powerful client-side subtitle editor and video burner. Upload a video and SRT file, edit subtitles in real-time, and export the burned-in video locally.",
+  "requestFramePermissions": []
+}
