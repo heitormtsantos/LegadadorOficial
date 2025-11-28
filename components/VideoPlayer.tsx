@@ -436,7 +436,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
         {exportStatus === ExportStatus.RECORDING && (
           <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 text-white">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2  mb-4"></div>
             <p className="text-lg font-semibold">Renderizando Vídeo...</p>
             <p className="text-sm text-gray-400">Por favor aguarde o fim da reprodução.</p>
           </div>
@@ -474,7 +474,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <button
             onClick={handleExport}
             disabled={!videoState.url || exportStatus === ExportStatus.RECORDING}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
           >
              {exportStatus === ExportStatus.RECORDING ? 'Processando...' : 'Renderizar & Baixar'}
           </button>
