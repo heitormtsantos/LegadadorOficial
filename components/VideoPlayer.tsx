@@ -35,8 +35,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   
   // Subtitle Positioning State
+  // x: center percentage (0.0 - 1.0), y: bottom anchor percentage (0.0 - 1.0)
   const [subtitlePos, setSubtitlePos] = useState({ x: 0.5, y: 0.85 });
   const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isHoveringSubtitle, setIsHoveringSubtitle] = useState(false);
   const subtitleRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
@@ -44,19 +46,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   useEffect(() => {
     if (videoState.url && videoRef.current) {
       videoRef.current.src = videoState.url;
-      // Reset download state when video changes
       setDownloadUrl(null);
     }
   }, [videoState.url]);
 
   // Helper function to wrap text
   const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
-    // Basic protection against empty text
-    if (!text) return [];
+    if (!text || text.trim() === '') return [];
 
     const words = text.split(' ');
     const lines: string[] = [];
-    let currentLine = words[0] || '';
+    let currentLine = words[0];
 
     for (let i = 1; i < words.length; i++) {
       const word = words[i];
@@ -76,15 +76,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const drawFrame = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    
+    // Safety check
+    if (!video || !canvas) {
+        animationFrameRef.current = requestAnimationFrame(drawFrame);
+        return;
+    }
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+         animationFrameRef.current = requestAnimationFrame(drawFrame);
+         return;
+    }
 
     // Match canvas size to video size
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+        }
     }
 
     // 1. Draw Video Frame
@@ -98,29 +108,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     if (activeSubs.length > 0) {
       // Style settings
-      // Calculate font size relative to video height based on the scale prop
-      const calculatedFontSize = Math.max(12, Math.round(canvas.height * (fontSizeScale / 1000)));
+      // Calculate font size relative to video height
+      const baseSize = canvas.height * (fontSizeScale / 1000);
+      const calculatedFontSize = Math.max(12, Math.round(baseSize));
       
-      // CapCut style: Arial Black / Heavy weight, Sans-serif
+      // CapCut style: Arial Black / Heavy weight
       ctx.font = `900 ${calculatedFontSize}px Arial, "Helvetica Neue", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle'; 
-      ctx.fillStyle = '#FFFFFF'; // Pure white
-      ctx.strokeStyle = '#000000'; // Pure black
-      ctx.lineWidth = calculatedFontSize * 0.25; // Thick stroke for readability
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = calculatedFontSize * 0.15; // Thick stroke
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
 
-      // Hard Shadow (CapCut style often uses a crisp drop shadow or just thick stroke)
+      // Hard Shadow
       ctx.shadowColor = "rgba(0,0,0,0.6)";
-      ctx.shadowBlur = 0; // Hard edge
-      ctx.shadowOffsetX = 2; // Slight offset
-      ctx.shadowOffsetY = 2;
+      ctx.shadowBlur = 0; 
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 3;
 
-      // Max width logic (85% of screen width to be safe)
-      const maxLineWidth = canvas.width * 0.85;
+      // Max width logic (90% of screen width)
+      const maxLineWidth = canvas.width * 0.90;
 
-      // Process Text Block with Wrapping
+      // Process Text Block
       const rawLines = activeSubs.map(s => s.text.split('\n')).flat();
       const wrappedLines: string[] = [];
       
@@ -129,73 +140,84 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       });
 
       // Measure final block size
-      let maxWidth = 0;
+      let maxTextWidth = 0;
       wrappedLines.forEach(line => {
          const metrics = ctx.measureText(line);
-         if (metrics.width > maxWidth) maxWidth = metrics.width;
+         if (metrics.width > maxTextWidth) maxTextWidth = metrics.width;
       });
 
       const lineHeight = calculatedFontSize * 1.25;
       const totalHeight = wrappedLines.length * lineHeight;
       
-      // Calculate Position
-      const centerX = canvas.width * subtitlePos.x;
-      const anchorY = canvas.height * subtitlePos.y; 
-      const startY = anchorY - totalHeight;
+      // --- POSITIONING LOGIC WITH CLAMPING ---
+      
+      // Target position based on user preference
+      let centerX = canvas.width * subtitlePos.x;
+      let bottomY = canvas.height * subtitlePos.y; 
+
+      // Safe Zone (padding from edges)
+      const padding = Math.max(20, canvas.width * 0.05); 
+      const halfWidth = maxTextWidth / 2;
+
+      // Clamp Horizontal (Keep text fully inside left/right)
+      if (centerX - halfWidth < padding) {
+          centerX = halfWidth + padding;
+      } else if (centerX + halfWidth > canvas.width - padding) {
+          centerX = canvas.width - padding - halfWidth;
+      }
+
+      // Clamp Vertical (Keep text fully inside top/bottom)
+      // Note: We render from top down, but anchor is bottom.
+      // Top of text block is (bottomY - totalHeight)
+      
+      // Prevent going off top
+      if (bottomY - totalHeight < padding) {
+          bottomY = totalHeight + padding;
+      }
+      // Prevent going off bottom
+      if (bottomY > canvas.height - padding) {
+          bottomY = canvas.height - padding;
+      }
+
+      // Final Render Start Y (Top of the first line)
+      // Because we draw lines from top down, we need the Y of the top-most line's middle?
+      // No, let's say startY is the top of the bounding box.
+      const bboxTopY = bottomY - totalHeight;
 
       // Update Hit Rect for Dragging
-      const padding = calculatedFontSize * 0.5;
+      const touchPadding = calculatedFontSize * 0.8; // Larger touch area
       subtitleRectRef.current = {
-          x: centerX - maxWidth / 2 - padding,
-          y: startY - padding,
-          w: maxWidth + padding * 2,
-          h: totalHeight + padding * 2
+          x: centerX - halfWidth - touchPadding,
+          y: bboxTopY - touchPadding,
+          w: maxTextWidth + touchPadding * 2,
+          h: totalHeight + touchPadding * 2
       };
 
-      // Draw Visual Feedback for Interaction (No shadow for UI elements)
-      ctx.shadowColor = "transparent";
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-
+      // Draw Visual Feedback for Dragging
       if (isDragging || isHoveringSubtitle) {
         ctx.save();
-        ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)'; // Blue
-        ctx.lineWidth = 2;
-        ctx.setLineDash([8, 6]);
+        ctx.shadowColor = "transparent";
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)'; // Bright Blue
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 5]);
         ctx.strokeRect(
            subtitleRectRef.current.x,
            subtitleRectRef.current.y,
            subtitleRectRef.current.w,
            subtitleRectRef.current.h
         );
-        
-        // Draw drag handle indicator if hovering
-        if (isHoveringSubtitle && !isDragging) {
-           ctx.fillStyle = 'rgba(59, 130, 246, 0.8)';
-           ctx.fillRect(
-             subtitleRectRef.current.x + subtitleRectRef.current.w / 2 - 20, 
-             subtitleRectRef.current.y - 10, 
-             40, 
-             4
-           );
-        }
         ctx.restore();
       }
       
-      // Restore Shadow for text
-      ctx.shadowColor = "rgba(0,0,0,0.6)";
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
-
       // Draw Text Lines
       wrappedLines.forEach((line, index) => {
-        const lineY = startY + (index * lineHeight) + (lineHeight / 2); 
-        const x = centerX;
-        // Stroke first (outline)
-        ctx.strokeText(line, x, lineY);
-        // Fill second (text face)
-        ctx.fillText(line, x, lineY);
+        // center of the line vertically
+        const lineY = bboxTopY + (index * lineHeight) + (lineHeight / 2); 
+        
+        ctx.strokeText(line, centerX, lineY);
+        ctx.fillText(line, centerX, lineY);
       });
+
     } else {
       subtitleRectRef.current = null;
     }
@@ -204,16 +226,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     animationFrameRef.current = requestAnimationFrame(drawFrame);
   };
 
-  // Start/Stop Rendering loop based on play state
+  // Start/Stop Rendering loop
   useEffect(() => {
-    if (videoState.url) {
-        animationFrameRef.current = requestAnimationFrame(drawFrame);
-    }
-    
+    animationFrameRef.current = requestAnimationFrame(drawFrame);
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  });
+  }, [subtitles, subtitlePos, fontSizeScale]); // Re-bind if these change, though mostly handled inside loop
 
   const handleExport = () => {
     const video = videoRef.current;
@@ -283,7 +302,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   };
 
-  // Mouse Interaction Handlers
+  // --- MOUSE INTERACTION ---
+
   const getMousePos = (e: React.MouseEvent) => {
       const canvas = canvasRef.current;
       if (!canvas) return { x: 0, y: 0 };
@@ -307,6 +327,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           y <= subtitleRectRef.current.y + subtitleRectRef.current.h
       ) {
           setIsDragging(true);
+          
+          // Calculate offset relative to the Anchor Point (center bottom usually)
+          // We reverse calculate where the anchor is currently onscreen
+          const rect = subtitleRectRef.current;
+          // Note: rect.x is left edge. center is rect.x + rect.w/2
+          const currentAnchorX = rect.x + rect.w / 2;
+          const currentAnchorY = rect.y + rect.h - (rect.h * 0.1); // approx bottom, removing padding
+          
+          setDragOffset({
+              x: x - currentAnchorX,
+              y: y - currentAnchorY
+          });
       }
   };
 
@@ -315,9 +347,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const canvas = canvasRef.current;
 
       if (isDragging && canvas) {
-          // Update position (clamp to 0-1)
-          const newX = Math.max(0, Math.min(1, x / canvas.width));
-          const newY = Math.max(0, Math.min(1, y / canvas.height));
+          // Apply offset to get back to anchor position
+          const targetAnchorX = x - dragOffset.x;
+          const targetAnchorY = y - dragOffset.y;
+
+          // Normalize to 0-1
+          const newX = targetAnchorX / canvas.width;
+          const newY = targetAnchorY / canvas.height;
+          
+          // We do NOT clamp here (we let user drag anywhere), but render loop clamps visual.
+          // This feels smoother.
           setSubtitlePos({ x: newX, y: newY });
           return;
       }
@@ -340,7 +379,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (isDragging) {
           setIsDragging(false);
       } else {
-          togglePlay();
+          // Only toggle play if we weren't dragging and not clicking a subtitle
+          if (!isHoveringSubtitle) {
+              togglePlay();
+          }
       }
   };
 
@@ -352,7 +394,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   return (
     <div className="flex flex-col gap-4 h-full">
       {/* Viewer Area */}
-      <div className="relative bg-black rounded-lg overflow-hidden shadow-2xl border border-gray-800 flex-1 flex items-center justify-center group">
+      <div className="relative bg-black rounded-lg overflow-hidden shadow-2xl border border-gray-800 flex-1 flex items-center justify-center group select-none">
         
         <video
           ref={videoRef}
@@ -386,18 +428,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         
         {/* Overlay Instruction for Dragging */}
         {videoState.url && subtitles.length > 0 && !isDragging && !videoState.isPlaying && (
-             <div className="absolute top-4 right-4 bg-black/60 text-white text-xs px-2 py-1 rounded border border-white/20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+             <div className="absolute top-4 right-4 bg-black/60 text-white text-xs px-2 py-1 rounded border border-white/20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 z-10">
                 <Move size={12} />
-                Arraste a legenda para mover
+                Arrastar Legenda
              </div>
         )}
 
         {exportStatus === ExportStatus.RECORDING && (
-          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50 text-white">
+          <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 text-white">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
             <p className="text-lg font-semibold">Renderizando Vídeo...</p>
-            <p className="text-sm text-gray-400">Por favor aguarde, o vídeo está tocando para capturar.</p>
-            <p className="text-xs text-gray-500 mt-2">Não troque de aba.</p>
+            <p className="text-sm text-gray-400">Por favor aguarde o fim da reprodução.</p>
           </div>
         )}
       </div>
@@ -423,7 +464,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
              <a
              href={downloadUrl}
              download="video_legendado.webm"
-             className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium transition-colors"
+             className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium transition-colors animate-pulse"
            >
              <Download size={18} />
              Baixar Resultado
