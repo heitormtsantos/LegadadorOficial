@@ -3,48 +3,38 @@ import { Subtitle } from '../types';
 /**
  * Converts a time string (00:00:00,000 or 00:00:00.000) to seconds.
  */
-export const srtTimeToSeconds = (timeString: string): number => {
-  if (!timeString) return 0;
+export const srtTimeToSeconds = (time: string): number => {
+  if (!time) return 0;
 
-  const trimmed = timeString.trim();
+  time = time.trim().replace("\ufeff", "");
 
-  // 1) Seu formato: "MM:SS:MMM"  (ex: 00:00:590, 00:59:800, 01:01:000)
-  //    minutos : segundos : milissegundos  (SEM vírgula)
-  const matchCapcut = trimmed.match(/^(\d{1,2}):(\d{2}):(\d{1,3})$/);
-  if (!trimmed.includes(',') && !trimmed.includes('.') && matchCapcut) {
-    const [, mm, ss, ms] = matchCapcut;
-    const minutes = parseInt(mm, 10) || 0;
-    const seconds = parseInt(ss, 10) || 0;
-    const millis = parseInt(ms.padEnd(3, '0'), 10) || 0;
-
-    return minutes * 60 + seconds + millis / 1000;
+  // Formato correto do seu arquivo: MM:SS,mmm (SEM horas)
+  const mmss = time.match(/^(\d{2}):(\d{2})[,.](\d{3})$/);
+  if (mmss) {
+    const [, mm, ss, ms] = mmss;
+    return (
+      Number(mm) * 60 +
+      Number(ss) +
+      Number(ms) / 1000
+    );
   }
 
-  // 2) Formato SRT padrão: "HH:MM:SS,mmm" ou "HH:MM:SS.mmm"
-  const normalized = trimmed.replace(',', '.');
-  const matchStd = normalized.match(/^(\d{1,2}):(\d{2}):(\d{2})\.(\d{1,3})$/);
-
-  if (matchStd) {
-    const [, hh, mm, ss, ms] = matchStd;
-    let hours = parseInt(hh, 10) || 0;
-    let minutes = parseInt(mm, 10) || 0;
-    const seconds = parseInt(ss, 10) || 0;
-    const millis = parseInt(ms.padEnd(3, '0'), 10) || 0;
-
-    // Heurística opcional pro SEU caso:
-    // se o vídeo nunca tem 1h+ e aparecer algo tipo "01:00:04,000",
-    // podemos tratar HORA como MINUTO quando minutes == 0 e hours <= 4
-    if (hours > 0 && hours <= 4 && minutes === 0) {
-      const pseudoMinutes = hours;
-      return pseudoMinutes * 60 + seconds + millis / 1000;
-    }
-
-    return hours * 3600 + minutes * 60 + seconds + millis / 1000;
+  // Formato SRT tradicional HH:MM:SS,mmm
+  const full = time.match(/^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/);
+  if (full) {
+    const [, hh, mm, ss, ms] = full;
+    return (
+      Number(hh) * 3600 +
+      Number(mm) * 60 +
+      Number(ss) +
+      Number(ms) / 1000
+    );
   }
 
-  console.warn('Formato de tempo SRT não reconhecido:', timeString);
+  console.warn("Formato desconhecido:", time);
   return 0;
 };
+
 
 
 /**
