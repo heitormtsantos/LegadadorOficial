@@ -32,21 +32,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const chunksRef = useRef<Blob[]>([]);
   const animationFrameRef = useRef<number>();
 
+  // Refs for rendering loop to avoid stale closures
+  const subtitlesRef = useRef(subtitles);
+  const fontSizeRef = useRef(fontSizeScale);
+  const subtitlePosRef = useRef({ x: 0.5, y: 0.85 });
+
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   
   // Subtitle Positioning State
-  // x: center percentage (0.0 - 1.0), y: bottom anchor percentage (0.0 - 1.0)
   const [subtitlePos, setSubtitlePos] = useState({ x: 0.5, y: 0.85 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isHoveringSubtitle, setIsHoveringSubtitle] = useState(false);
   const subtitleRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
-  // Setup video source
+  // Sync refs
+  useEffect(() => { subtitlesRef.current = subtitles; }, [subtitles]);
+  useEffect(() => { fontSizeRef.current = fontSizeScale; }, [fontSizeScale]);
+  useEffect(() => { subtitlePosRef.current = subtitlePos; }, [subtitlePos]);
+
+  // Setup video source safely
   useEffect(() => {
-    if (videoState.url && videoRef.current) {
-      videoRef.current.src = videoState.url;
-      setDownloadUrl(null);
+    const video = videoRef.current;
+    if (video && videoState.url) {
+      // Only set src if it's different to avoid reloading/errors
+      if (video.src !== videoState.url) {
+          video.src = videoState.url;
+          video.load(); // Explicit load
+          setDownloadUrl(null);
+      }
     }
   }, [videoState.url]);
 
@@ -77,7 +91,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Safety check
+    // Use requestAnimationFrame at the end, or early return
     if (!video || !canvas) {
         animationFrameRef.current = requestAnimationFrame(drawFrame);
         return;
@@ -97,19 +111,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         }
     }
 
-    // 1. Draw Video Frame
+    // 1. Clear & Draw Video Frame
+    ctx.clearRect(0,0, canvas.width, canvas.height);
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // 2. Draw Subtitles
+    // 2. Draw Subtitles using Refs (latest state)
     const currentTime = video.currentTime;
-    const activeSubs = subtitles.filter(
+    const currentSubtitles = subtitlesRef.current;
+    const currentFontSize = fontSizeRef.current;
+    const currentPos = subtitlePosRef.current;
+
+    const activeSubs = currentSubtitles.filter(
       (s) => currentTime >= s.startTime && currentTime <= s.endTime
     );
 
     if (activeSubs.length > 0) {
+      ctx.save(); // Save state to prevent leaking styles
+
       // Style settings
       // Calculate font size relative to video height
-      const baseSize = canvas.height * (fontSizeScale / 1000);
+      const baseSize = canvas.height * (currentFontSize / 1000);
       const calculatedFontSize = Math.max(12, Math.round(baseSize));
       
       // CapCut style: Arial Black / Heavy weight
@@ -151,44 +172,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       
       // --- POSITIONING LOGIC WITH CLAMPING ---
       
-      // Target position based on user preference
-      let centerX = canvas.width * subtitlePos.x;
-      let bottomY = canvas.height * subtitlePos.y; 
+      let centerX = canvas.width * currentPos.x;
+      let bottomY = canvas.height * currentPos.y; 
 
       // Safe Zone (padding from edges)
       const padding = Math.max(20, canvas.width * 0.05); 
       const halfWidth = maxTextWidth / 2;
 
-      // Clamp Horizontal (Keep text fully inside left/right)
+      // Clamp Horizontal
       if (centerX - halfWidth < padding) {
           centerX = halfWidth + padding;
       } else if (centerX + halfWidth > canvas.width - padding) {
           centerX = canvas.width - padding - halfWidth;
       }
 
-      // Clamp Vertical (Keep text fully inside top/bottom)
-      // Note: We render from top down, but anchor is bottom.
-      // Top of text block is (bottomY - totalHeight)
-      
-      // Prevent going off top
-      if (bottomY - totalHeight < padding) {
+      // Clamp Vertical
+      const bboxTopY = bottomY - totalHeight;
+      if (bboxTopY < padding) {
           bottomY = totalHeight + padding;
       }
-      // Prevent going off bottom
       if (bottomY > canvas.height - padding) {
           bottomY = canvas.height - padding;
       }
-
-      // Final Render Start Y (Top of the first line)
-      // Because we draw lines from top down, we need the Y of the top-most line's middle?
-      // No, let's say startY is the top of the bounding box.
-      const bboxTopY = bottomY - totalHeight;
+      
+      const clampedTopY = bottomY - totalHeight;
 
       // Update Hit Rect for Dragging
-      const touchPadding = calculatedFontSize * 0.8; // Larger touch area
+      const touchPadding = calculatedFontSize * 0.8; 
       subtitleRectRef.current = {
           x: centerX - halfWidth - touchPadding,
-          y: bboxTopY - touchPadding,
+          y: clampedTopY - touchPadding,
           w: maxTextWidth + touchPadding * 2,
           h: totalHeight + touchPadding * 2
       };
@@ -211,12 +224,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       
       // Draw Text Lines
       wrappedLines.forEach((line, index) => {
-        // center of the line vertically
-        const lineY = bboxTopY + (index * lineHeight) + (lineHeight / 2); 
+        const lineY = clampedTopY + (index * lineHeight) + (lineHeight / 2); 
         
         ctx.strokeText(line, centerX, lineY);
         ctx.fillText(line, centerX, lineY);
       });
+      
+      ctx.restore(); // Restore context
 
     } else {
       subtitleRectRef.current = null;
@@ -232,7 +246,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [subtitles, subtitlePos, fontSizeScale]); // Re-bind if these change, though mostly handled inside loop
+  }, []);
 
   const handleExport = () => {
     const video = videoRef.current;
@@ -328,12 +342,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       ) {
           setIsDragging(true);
           
-          // Calculate offset relative to the Anchor Point (center bottom usually)
-          // We reverse calculate where the anchor is currently onscreen
           const rect = subtitleRectRef.current;
-          // Note: rect.x is left edge. center is rect.x + rect.w/2
           const currentAnchorX = rect.x + rect.w / 2;
-          const currentAnchorY = rect.y + rect.h - (rect.h * 0.1); // approx bottom, removing padding
+          const currentAnchorY = rect.y + rect.h - (rect.h * 0.1); 
           
           setDragOffset({
               x: x - currentAnchorX,
@@ -347,21 +358,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const canvas = canvasRef.current;
 
       if (isDragging && canvas) {
-          // Apply offset to get back to anchor position
           const targetAnchorX = x - dragOffset.x;
           const targetAnchorY = y - dragOffset.y;
 
-          // Normalize to 0-1
           const newX = targetAnchorX / canvas.width;
           const newY = targetAnchorY / canvas.height;
           
-          // We do NOT clamp here (we let user drag anywhere), but render loop clamps visual.
-          // This feels smoother.
+          // Update via setSubtitlePos (React State) which will sync to ref
           setSubtitlePos({ x: newX, y: newY });
           return;
       }
 
-      // Check hover
       if (subtitleRectRef.current) {
           const isHit = (
               x >= subtitleRectRef.current.x &&
@@ -379,7 +386,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (isDragging) {
           setIsDragging(false);
       } else {
-          // Only toggle play if we weren't dragging and not clicking a subtitle
           if (!isHoveringSubtitle) {
               togglePlay();
           }
@@ -405,6 +411,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           onPause={() => onPlayStateChange(false)}
           onEnded={() => onPlayStateChange(false)}
           playsInline
+          preload="metadata"
           crossOrigin="anonymous"
         />
 
@@ -426,7 +433,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           />
         )}
         
-        {/* Overlay Instruction for Dragging */}
         {videoState.url && subtitles.length > 0 && !isDragging && !videoState.isPlaying && (
              <div className="absolute top-4 right-4 bg-black/60 text-white text-xs px-2 py-1 rounded border border-white/20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 z-10">
                 <Move size={12} />
@@ -436,7 +442,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
         {exportStatus === ExportStatus.RECORDING && (
           <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 text-white">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2  mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
             <p className="text-lg font-semibold">Renderizando Vídeo...</p>
             <p className="text-sm text-gray-400">Por favor aguarde o fim da reprodução.</p>
           </div>
@@ -474,7 +480,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <button
             onClick={handleExport}
             disabled={!videoState.url || exportStatus === ExportStatus.RECORDING}
-            className="flex items-center gap-2 px-4 py-2 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
           >
              {exportStatus === ExportStatus.RECORDING ? 'Processando...' : 'Renderizar & Baixar'}
           </button>

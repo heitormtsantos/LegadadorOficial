@@ -1,8 +1,7 @@
-// src/types.ts
 export interface Subtitle {
   id: number;
-  startTime: number; // em segundos
-  endTime: number;   // em segundos
+  startTime: number; // in seconds
+  endTime: number; // in seconds
   text: string;
 }
 
