@@ -41,7 +41,60 @@ const App: React.FC = () => {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         if (text) {
-          const parsed = parseSRT(text);
+          let parsed = parseSRT(text);
+          
+          if (parsed.length > 0) {
+            // Sort initially by start time
+            parsed.sort((a, b) => a.startTime - b.startTime);
+
+            // PASS 1: Global Broadcast Fix
+            // If the very first subtitle starts at >= 1 hour (3600s), 
+            // assume the whole file is offset by 1h (01:00:00:00 timecode base).
+            if (parsed[0].startTime >= 3600) {
+               const hoursToShift = Math.floor(parsed[0].startTime / 3600) * 3600;
+               parsed = parsed.map(sub => ({
+                 ...sub,
+                 startTime: Math.max(0, sub.startTime - hoursToShift),
+                 endTime: Math.max(0, sub.endTime - hoursToShift)
+               }));
+            }
+
+            // PASS 2: Mixed Timecode Artifact Fix
+            // Fixes cases where some subtitles are 00:00:59 and others are 01:00:02 
+            // (jumping 1 hour) due to editor bugs.
+            for (let i = 1; i < parsed.length; i++) {
+                const prev = parsed[i-1];
+                const curr = parsed[i];
+                
+                // If current has a huge start time (> 1h) but previous was small (< 1h)
+                if (curr.startTime >= 3600 && prev.endTime < 3600) {
+                    const gap = curr.startTime - prev.endTime;
+                    // If the gap is roughly 1 hour (3500-3700s), remove the 1h offset
+                    if (gap > 3500 && gap < 3700) {
+                        const shift = 3600;
+                        // Apply shift to this and all subsequent subtitles
+                        for (let j = i; j < parsed.length; j++) {
+                            parsed[j].startTime -= shift;
+                            parsed[j].endTime -= shift;
+                        }
+                    }
+                }
+            }
+
+            // PASS 3: Validation & Clean up
+            parsed = parsed.map(sub => {
+                // Fix inverted or zero duration
+                if (sub.endTime <= sub.startTime) {
+                    sub.endTime = sub.startTime + 2.5; // Default duration
+                }
+                return sub;
+            });
+
+            // Re-sort because Pass 2 might have moved 01:00:02 -> 00:00:02, 
+            // placing it before the 00:00:59 subtitle.
+            parsed.sort((a, b) => a.startTime - b.startTime);
+          }
+
           setSubtitles(parsed);
         }
       };
@@ -88,15 +141,6 @@ const App: React.FC = () => {
   }, []);
 
   const handleSeek = (time: number) => {
-     // This function is tricky because we need to imperatively tell the video element to seek.
-     // However, the video element is inside VideoPlayer.
-     // To keep it clean, we will update the state, but we really need a way to pass this down effectively.
-     // For this architecture, let's just update the video element directly via a DOM selection if we wanted to be dirty,
-     // but a better way is accessing the video ref. 
-     // Since VideoPlayer owns the ref, we actually need to change logic: 
-     // Let's rely on VideoPlayer detecting a prop change? No, seeking is imperative.
-     // We will cheat slightly for simplicity: find the video element in DOM. 
-     // In a production app, use a Context or forwardRef.
      const videoEl = document.querySelector('video');
      if (videoEl) {
        videoEl.currentTime = time;
