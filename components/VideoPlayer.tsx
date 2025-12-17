@@ -33,6 +33,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const animationFrameRef = useRef<number>();
 
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
 
   // Subtitle Positioning State
   // x: center percentage (0.0 - 1.0), y: bottom anchor percentage (0.0 - 1.0)
@@ -50,6 +51,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Setup video source
   useEffect(() => {
     if (videoState.url && videoRef.current) {
+      setVideoError(null); // Reset error on new video
       videoRef.current.src = videoState.url;
       setDownloadUrl(null);
     }
@@ -87,7 +89,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const canvas = canvasRef.current;
 
     // Safety check
-    if (!video || !canvas) {
+    if (!video || !canvas || videoError) {
       animationFrameRef.current = requestAnimationFrame(drawFrame);
       return;
     }
@@ -244,7 +246,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [subtitles, subtitlePos, fontSizeScale]); // Re-bind if these change, though mostly handled inside loop
+  }, [subtitles, subtitlePos, fontSizeScale, videoError]); // Re-bind if these change
 
   const handleExport = () => {
     const video = videoRef.current;
@@ -297,6 +299,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       video.currentTime = 0;
       onPlayStateChange(false);
+
+      // Auto download
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getDownloadFileName();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     };
 
     video.currentTime = 0;
@@ -315,7 +325,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (videoState.isPlaying) {
         videoRef.current.pause();
       } else {
-        videoRef.current.play();
+        videoRef.current
+          .play()
+          .catch((err) =>
+            setVideoError(
+              `Error playing video: ${err.name} - ${err.message}`
+            )
+          );
       }
     }
   };
@@ -408,6 +424,39 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setIsHoveringSubtitle(false);
   };
 
+  const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    const error = e.currentTarget.error;
+    let errorMessage = "An unknown video error occurred.";
+    if (error) {
+       switch (error.code) {
+         case 1: // MEDIA_ERR_ABORTED
+           errorMessage = "The video playback was aborted.";
+           break;
+         case 2: // MEDIA_ERR_NETWORK
+           errorMessage = "A network error caused the video to fail to load.";
+           break;
+         case 3: // MEDIA_ERR_DECODE
+           errorMessage = "The video could not be decoded, likely due to corruption or an unsupported format.";
+           break;
+         case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+           errorMessage = "The video format is not supported.";
+           break;
+         default:
+            errorMessage = `An unexpected error occurred. Error code: ${error.code}`;
+       }
+    }
+    setVideoError(errorMessage);
+  }
+
+  const getDownloadFileName = () => {
+    if (videoState.file?.name) {
+      const originalName = videoState.file.name;
+      const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+      return `${nameWithoutExt}_legendado.webm`;
+    }
+    return "video_legendado.webm";
+  };
+
   return (
     <div className="flex flex-col gap-4 h-full">
       {/* Viewer Area */}
@@ -420,6 +469,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           onPlay={() => onPlayStateChange(true)}
           onPause={() => onPlayStateChange(false)}
           onEnded={() => onPlayStateChange(false)}
+          onLoadedData={() => console.log("Video data loaded successfully!")}
+          onError={handleVideoError}
           playsInline
         />
 
@@ -428,6 +479,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             <MonitorPlay size={48} className="mb-4 opacity-50" />
             <p>Selecione um video para começar</p>
           </div>
+        ) : videoError ? (
+            <div className="text-red-400 text-center p-4">
+                <p className="font-bold mb-2">Error Loading Video</p>
+                <p className="text-sm">{videoError}</p>
+            </div>
         ) : (
           <canvas
             ref={canvasRef}
@@ -471,7 +527,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <button
             onClick={togglePlay}
             disabled={
-              !videoState.url || exportStatus === ExportStatus.RECORDING
+              !videoState.url || exportStatus === ExportStatus.RECORDING || !!videoError
             }
             className="p-3 bg-gray-800 rounded-full hover:bg-gray-700 disabled:opacity-50 text-white transition-colors"
           >
@@ -487,7 +543,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           {downloadUrl && exportStatus === ExportStatus.COMPLETED && (
             <a
               href={downloadUrl}
-              download="video_legendado.webm"
+              download={getDownloadFileName()}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium transition-colors animate-pulse"
             >
               <Download size={18} />
@@ -498,7 +554,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <button
             onClick={handleExport}
             disabled={
-              !videoState.url || exportStatus === ExportStatus.RECORDING
+              !videoState.url || exportStatus === ExportStatus.RECORDING || !!videoError
             }
             className="flex items-center gap-2 px-4 py-2 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
           >

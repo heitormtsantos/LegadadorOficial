@@ -18,3 +18,10 @@ export enum ExportStatus {
   RECORDING = 'RECORDING',
   COMPLETED = 'COMPLETED',
 }
+
+export interface ReplacementRule {
+  id: string;
+  find: string;
+  replace: string;
+  isActive: boolean;
+}

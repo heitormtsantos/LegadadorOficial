@@ -1,154 +1,100 @@
-import React, { useState, useCallback } from 'react';
-import { Subtitle, VideoState, ExportStatus } from './types';
-import { parseSRT, srtTimeToSeconds } from './utils/srtHelper';
+import React, { useState } from 'react';
+import { ExportStatus } from './types';
 import { SubtitleList } from './components/SubtitleList';
 import { VideoPlayer } from './components/VideoPlayer';
-import { Upload, FileText, Film } from 'lucide-react';
+import { FindReplaceModal } from './components/FindReplaceModal';
+import { useGlossary } from './hooks/useGlossary';
+import { GlossaryModal } from './components/GlossaryModal';
+import { Upload, FileText, Film, Download, Trash2, Search, Book } from 'lucide-react';
+import { useVideoPlayer } from './hooks/useVideoPlayer';
+import { useSubtitles } from './hooks/useSubtitles';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 const App: React.FC = () => {
-  // State
-  const [videoState, setVideoState] = useState<VideoState>({
-    file: null,
-    url: null,
-    duration: 0,
-    currentTime: 0,
-    isPlaying: false,
-  });
-  const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
-  const [exportStatus, setExportStatus] = useState<ExportStatus>(ExportStatus.IDLE);
-  const [fontSize, setFontSize] = useState<number>(50); // Default scale value (approx 5% of height)
+  const {
+    rules,
+    addRule,
+    removeRule,
+    toggleRule,
+    applyRulesToSubtitles,
+  } = useGlossary();
 
-  // Handlers
-  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setVideoState((prev) => ({
-        ...prev,
-        file,
-        url,
-        currentTime: 0,
-        isPlaying: false,
-      }));
-      setExportStatus(ExportStatus.IDLE);
-    }
-  };
+  const {
+    videoState,
+    exportStatus,
+    setExportStatus,
+    handleVideoUpload,
+    handleTimeUpdate,
+    handleDurationChange,
+    handlePlayStateChange,
+  } = useVideoPlayer();
 
-  const handleSrtUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        if (text) {
-          let parsed = parseSRT(text);
-          
-          if (parsed.length > 0) {
-            // Sort initially by start time
-            parsed.sort((a, b) => a.startTime - b.startTime);
+  const {
+    subtitles,
+    handleSrtUpload,
+    updateSubtitle,
+    deleteSubtitle,
+    addSubtitle,
+    clearSubtitles,
+    downloadSrt,
+    replaceText,
+    applyGlossaryToCurrent,
+  } = useSubtitles(videoState.currentTime, rules);
 
-            // PASS 1: Global Broadcast Fix
-            // If the very first subtitle starts at >= 1 hour (3600s), 
-            // assume the whole file is offset by 1h (01:00:00:00 timecode base).
-            if (parsed[0].startTime >= 3600) {
-               const hoursToShift = Math.floor(parsed[0].startTime / 3600) * 3600;
-               parsed = parsed.map(sub => ({
-                 ...sub,
-                 startTime: Math.max(0, sub.startTime - hoursToShift),
-                 endTime: Math.max(0, sub.endTime - hoursToShift)
-               }));
-            }
+  const [fontSize, setFontSize] = useState<number>(50);
+  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
+  const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
 
-            // PASS 2: Mixed Timecode Artifact Fix
-            // Fixes cases where some subtitles are 00:00:59 and others are 01:00:02 
-            // (jumping 1 hour) due to editor bugs.
-            for (let i = 1; i < parsed.length; i++) {
-                const prev = parsed[i-1];
-                const curr = parsed[i];
-                
-                // If current has a huge start time (> 1h) but previous was small (< 1h)
-                if (curr.startTime >= 3600 && prev.endTime < 3600) {
-                    const gap = curr.startTime - prev.endTime;
-                    // If the gap is roughly 1 hour (3500-3700s), remove the 1h offset
-                    if (gap > 3500 && gap < 3700) {
-                        const shift = 3600;
-                        // Apply shift to this and all subsequent subtitles
-                        for (let j = i; j < parsed.length; j++) {
-                            parsed[j].startTime -= shift;
-                            parsed[j].endTime -= shift;
-                        }
-                    }
-                }
-            }
-
-            // PASS 3: Validation & Clean up
-            parsed = parsed.map(sub => {
-                // Fix inverted or zero duration
-                if (sub.endTime <= sub.startTime) {
-                    sub.endTime = sub.startTime + 2.5; // Default duration
-                }
-                return sub;
-            });
-
-            // Re-sort because Pass 2 might have moved 01:00:02 -> 00:00:02, 
-            // placing it before the 00:00:59 subtitle.
-            parsed.sort((a, b) => a.startTime - b.startTime);
-          }
-
-          setSubtitles(parsed);
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const updateSubtitle = (id: number, updated: Partial<Subtitle>) => {
-    setSubtitles((prev) =>
-      prev.map((sub) => (sub.id === id ? { ...sub, ...updated } : sub))
-    );
-  };
-
-  const deleteSubtitle = (id: number) => {
-    setSubtitles((prev) => prev.filter((sub) => sub.id !== id));
-  };
-
-  const addSubtitle = () => {
-    const newId = subtitles.length > 0 ? Math.max(...subtitles.map((s) => s.id)) + 1 : 1;
-    // Add after current time or at 0
-    const start = videoState.currentTime;
-    const end = start + 3; // default 3 seconds duration
-    
-    const newSub: Subtitle = {
-      id: newId,
-      startTime: start,
-      endTime: end,
-      text: 'Nova Legenda',
-    };
-    
-    setSubtitles((prev) => [...prev, newSub].sort((a, b) => a.startTime - b.startTime));
-  };
-
-  const handleTimeUpdate = useCallback((time: number) => {
-    setVideoState((prev) => ({ ...prev, currentTime: time }));
-  }, []);
-
-  const handleDurationChange = useCallback((duration: number) => {
-    setVideoState((prev) => ({ ...prev, duration }));
-  }, []);
-
-  const handlePlayStateChange = useCallback((isPlaying: boolean) => {
-    setVideoState((prev) => ({ ...prev, isPlaying }));
-  }, []);
 
   const handleSeek = (time: number) => {
-     const videoEl = document.querySelector('video');
-     if (videoEl) {
-       videoEl.currentTime = time;
-     }
+    const videoEl = document.querySelector('video');
+    if (videoEl) {
+      videoEl.currentTime = time;
+    }
   };
+
+  const handleTogglePlay = () => {
+    const videoEl = document.querySelector('video');
+    if (videoEl) {
+      if (videoEl.paused) {
+        videoEl.play();
+      } else {
+        videoEl.pause();
+      }
+    }
+  };
+
+  const handleRelativeSeek = (seconds: number) => {
+    const videoEl = document.querySelector('video');
+    if (videoEl) {
+      videoEl.currentTime += seconds;
+    }
+  };
+
+  useKeyboardShortcuts({
+    onPlayPause: handleTogglePlay,
+    onSeek: handleRelativeSeek,
+    enabled: !!videoState.url,
+  });
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-white overflow-hidden">
+      <FindReplaceModal 
+        isOpen={isFindReplaceOpen} 
+        onClose={() => setIsFindReplaceOpen(false)}
+        onReplace={replaceText}
+      />
+      
+      <GlossaryModal
+        isOpen={isGlossaryOpen}
+        onClose={() => setIsGlossaryOpen(false)}
+        rules={rules}
+        onAddRule={addRule}
+        onRemoveRule={removeRule}
+        onToggleRule={toggleRule}
+        onApplyRules={() => applyGlossaryToCurrent(rules)}
+      />
+
       {/* Header */}
       <header className="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-2">
@@ -159,12 +105,51 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex gap-4">
+          {/* Action Buttons */}
+          <button
+              onClick={() => setIsGlossaryOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 rounded-lg transition-colors text-sm border border-yellow-900/50"
+              title="Gerenciar Glossário de Substituições"
+            >
+              <Book size={16} />
+              <span className="hidden sm:inline">Glossário</span>
+          </button>
+
+          {subtitles.length > 0 && (
+            <>
+              <button
+                onClick={() => setIsFindReplaceOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg transition-colors text-sm border border-gray-700"
+                title="Substituir Texto"
+              >
+                <Search size={16} />
+                <span className="hidden sm:inline">Substituir</span>
+              </button>
+
+              <button
+                onClick={clearSubtitles}
+                className="flex items-center gap-2 px-4 py-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg transition-colors text-sm border border-red-900/50"
+                title="Apagar todas as legendas"
+              >
+                <Trash2 size={16} />
+              </button>
+
+              <button
+                onClick={downloadSrt}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 rounded-lg transition-colors text-sm border border-blue-900/50"
+              >
+                <Download size={16} />
+                <span>Baixar SRT</span>
+              </button>
+            </>
+          )}
+
           <label className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer transition-colors text-sm border border-gray-700">
             <Upload size={16} />
             <span className="truncate max-w-[150px]">
               {videoState.file ? videoState.file.name : 'Carregar Vídeo'}
             </span>
-            <input type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
+            <input type="file" accept="video/mp4,video/webm,video/ogg,video/*" onChange={handleVideoUpload} className="hidden" />
           </label>
           
           <label className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer transition-colors text-sm border border-gray-700">
