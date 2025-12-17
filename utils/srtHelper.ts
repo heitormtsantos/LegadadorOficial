@@ -22,13 +22,18 @@ export const srtTimeToSeconds = (time: string): number => {
     return Number(hh) * 3600 + Number(mm) * 60 + Number(ss) + Number(ms) / 1000;
   }
 
-  // 🆕 Formato MALFORMADO encontrado no seu SRT: HH:MM:mmm
-  // Ex.: 01:12:704 → 1min 12s 704ms
-  const broken = time.match(/^(\d{2}):(\d{2}):(\d{3})$/);
-  if (broken) {
-    const [, mm, ss, ms] = broken;
-
-    return Number(mm) * 60 + Number(ss) + Number(ms) / 1000;
+  // 🆕 Formato MALFORMADO específico mencionado pelo usuário: 0000:18,523
+  // Ex.: 0000:18,523 --> 00:00:19,263
+  // Parece ser HHHH:MM,mmm ou algo do tipo, mas no contexto é 00:00:18,523 com typo
+  // Vamos tentar salvar convertendo 4 dígitos iniciais em HH:MM se fizer sentido
+  const typoFormat = time.match(/^(\d{4}):(\d{2})[,.](\d{3})$/);
+  if (typoFormat) {
+    // Assumindo que 0000 é HHMM
+    const [, prefix, ss, ms] = typoFormat;
+    const hh = prefix.substring(0, 2);
+    const mm = prefix.substring(2, 4);
+    
+    return Number(hh) * 3600 + Number(mm) * 60 + Number(ss) + Number(ms) / 1000;
   }
 
   // 🆕 Outro formato possível: SS:mmm (sem minutos)
@@ -36,6 +41,16 @@ export const srtTimeToSeconds = (time: string): number => {
   if (short) {
     const [, ss, ms] = short;
     return Number(ss) + Number(ms) / 1000;
+  }
+
+  // 🆕 Formato MALFORMADO: MM:SS:mmm (o que parece ser HH:MM:mmm, mas pelo contexto de vídeos curtos é MM:SS:mmm)
+  // Exemplo do usuário: 00:14:833 --> 14 segundos e 833ms
+  // Como os vídeos são curtos (< 5 min), se o primeiro dígito for pequeno, assumimos que é minuto.
+  const weirdFormat = time.match(/^(\d{2}):(\d{2}):(\d{3})$/);
+  if (weirdFormat) {
+    const [, mm, ss, ms] = weirdFormat;
+    // Interpretar como Minuto:Segundo:Milissegundo
+    return Number(mm) * 60 + Number(ss) + Number(ms) / 1000;
   }
 
   console.warn("Formato desconhecido:", time);
@@ -75,8 +90,10 @@ export const parseSRT = (data: string): Subtitle[] => {
       // But we should check regex for time
 
       let timeIndex = -1;
+      // Regex principal para capturar tempos
+      // Tenta ser o mais permissivo possível com os dígitos
       const timeRegex =
-        /(\d{1,2}:\d{2}(?::\d{1,2})?(?:[,:.]\d{3}|\:\d{3}))\s*-->\s*(\d{1,2}:\d{2}(?::\d{1,2})?(?:[,:.]\d{3}|\:\d{3}))/;
+        /(\d{1,4}:\d{1,4}(?::\d{1,4})?(?:[,:.]\d{1,4})?)\s*-->\s*(\d{1,4}:\d{1,4}(?::\d{1,4})?(?:[,:.]\d{1,4})?)/;
 
       for (let i = 0; i < lines.length; i++) {
         if (timeRegex.test(lines[i])) {
