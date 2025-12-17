@@ -39,6 +39,7 @@ const App: React.FC = () => {
     downloadSrt,
     replaceText,
     applyGlossaryToCurrent,
+    shiftAllSubtitles,
   } = useSubtitles(videoState.currentTime, rules);
 
   const [fontSize, setFontSize] = useState<number>(50);

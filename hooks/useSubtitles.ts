@@ -148,6 +148,16 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
     }
   }, []);
 
+  const shiftAllSubtitles = useCallback((amount: number) => {
+    setSubtitles((prev) =>
+      prev.map((sub) => ({
+        ...sub,
+        startTime: Math.max(0, sub.startTime + amount),
+        endTime: Math.max(0, sub.endTime + amount),
+      }))
+    );
+  }, []);
+
   const downloadSrt = useCallback(() => {
     const content = generateSRT(subtitles);
     const blob = new Blob([content], { type: 'text/srt' });
@@ -212,6 +222,7 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
     clearSubtitles,
     downloadSrt,
     replaceText,
-    applyGlossaryToCurrent
+    applyGlossaryToCurrent,
+    shiftAllSubtitles
   };
 };

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Subtitle } from '../types';
 import { secondsToSrtTime, srtTimeToSeconds } from '../utils/srtHelper';
-import { Clock, Trash2, Plus, Type } from 'lucide-react';
+import { Clock, Trash2, Plus, Type, ChevronLeft, ChevronRight, Timer, ArrowRight, Watch } from 'lucide-react';
 
 interface SubtitleListProps {
   subtitles: Subtitle[];
@@ -12,6 +12,7 @@ interface SubtitleListProps {
   onDeleteSubtitle: (id: number) => void;
   onAddSubtitle: () => void;
   onSeek: (time: number) => void;
+  onShiftAll: (amount: number) => void;
 }
 
 export const SubtitleList: React.FC<SubtitleListProps> = ({
@@ -23,6 +24,7 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
   onDeleteSubtitle,
   onAddSubtitle,
   onSeek,
+  onShiftAll,
 }) => {
   const activeSubtitleRef = useRef<HTMLDivElement>(null);
 
@@ -41,8 +43,8 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-gray-900 border-l border-gray-800">
-      <div className="p-4 border-b border-gray-800 bg-gray-850">
-        <div className="flex justify-between items-center mb-3">
+      <div className="p-4 border-b border-gray-800 bg-gray-850 space-y-3">
+        <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold text-white">Legendas</h2>
             <button
             onClick={onAddSubtitle}
@@ -53,6 +55,20 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
             </button>
         </div>
         
+        {/* Global Time Shift */}
+        <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
+           <div className="flex items-center gap-1 text-xs text-gray-400 mb-1">
+              <Timer size={12} />
+              <span>Ajustar Tempo (Todos)</span>
+           </div>
+           <div className="flex justify-between gap-1">
+              <button onClick={() => onShiftAll(-1)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-xs py-1 rounded text-gray-300 transition-colors">-1s</button>
+              <button onClick={() => onShiftAll(-0.5)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-xs py-1 rounded text-gray-300 transition-colors">-0.5s</button>
+              <button onClick={() => onShiftAll(0.5)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-xs py-1 rounded text-gray-300 transition-colors">+0.5s</button>
+              <button onClick={() => onShiftAll(1)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-xs py-1 rounded text-gray-300 transition-colors">+1s</button>
+           </div>
+        </div>
+
         {/* Font Size Control */}
         <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
             <div className="flex justify-between items-center text-xs text-gray-400">
@@ -92,38 +108,62 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
                     : 'bg-gray-850 border-gray-700 hover:border-gray-600'
                 }`}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock size={14} className="text-gray-400" />
-                  <input
-                    type="text"
-                    className="bg-transparent text-xs text-gray-400 font-mono focus:text-blue-400 focus:outline-none w-24"
-                    value={secondsToSrtTime(sub.startTime)}
-                    onChange={(e) =>
-                      onUpdateSubtitle(sub.id, {
-                        startTime: srtTimeToSeconds(e.target.value),
-                      })
-                    }
-                    onBlur={() => onSeek(sub.startTime)} 
-                  />
-                  <span className="text-gray-600 text-xs">→</span>
-                  <input
-                    type="text"
-                    className="bg-transparent text-xs text-gray-400 font-mono focus:text-blue-400 focus:outline-none w-24"
-                    value={secondsToSrtTime(sub.endTime)}
-                    onChange={(e) =>
-                      onUpdateSubtitle(sub.id, {
-                        endTime: srtTimeToSeconds(e.target.value),
-                      })
-                    }
-                  />
-                  <div className="ml-auto">
-                    <button
-                      onClick={() => onDeleteSubtitle(sub.id)}
-                      className="text-gray-500 hover:text-red-400 p-1"
-                      title="Excluir"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                <div className="flex flex-col gap-2 mb-2">
+                  <div className="flex items-center justify-between gap-1">
+                    {/* Start Time */}
+                    <div className="flex items-center gap-1 bg-gray-900 rounded p-1 border border-gray-800">
+                      <button 
+                        onClick={() => onUpdateSubtitle(sub.id, { startTime: currentTime })}
+                        title="Definir início como tempo atual"
+                        className="text-gray-500 hover:text-blue-400 p-0.5"
+                      >
+                        <Watch size={12} />
+                      </button>
+                      <input
+                        type="text"
+                        className="bg-transparent text-xs text-gray-300 font-mono focus:text-blue-400 focus:outline-none w-[70px] text-center"
+                        value={secondsToSrtTime(sub.startTime)}
+                        onChange={(e) =>
+                          onUpdateSubtitle(sub.id, {
+                            startTime: srtTimeToSeconds(e.target.value),
+                          })
+                        }
+                        onBlur={() => onSeek(sub.startTime)} 
+                      />
+                    </div>
+
+                    <ArrowRight size={12} className="text-gray-600" />
+
+                    {/* End Time */}
+                    <div className="flex items-center gap-1 bg-gray-900 rounded p-1 border border-gray-800">
+                      <input
+                        type="text"
+                        className="bg-transparent text-xs text-gray-300 font-mono focus:text-blue-400 focus:outline-none w-[70px] text-center"
+                        value={secondsToSrtTime(sub.endTime)}
+                        onChange={(e) =>
+                          onUpdateSubtitle(sub.id, {
+                            endTime: srtTimeToSeconds(e.target.value),
+                          })
+                        }
+                      />
+                      <button 
+                        onClick={() => onUpdateSubtitle(sub.id, { endTime: currentTime })}
+                        title="Definir fim como tempo atual"
+                        className="text-gray-500 hover:text-blue-400 p-0.5"
+                      >
+                         <Watch size={12} />
+                      </button>
+                    </div>
+
+                    <div className="ml-1">
+                      <button
+                        onClick={() => onDeleteSubtitle(sub.id)}
+                        className="text-gray-500 hover:text-red-400 p-1"
+                        title="Excluir"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
