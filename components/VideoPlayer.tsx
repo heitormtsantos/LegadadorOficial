@@ -123,24 +123,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (activeSubs.length > 0) {
       // Style settings
       // Calculate font size relative to video height
+      // "12px" in doc is likely reference size. We use relative scaling.
       const baseSize = canvas.height * (fontSizeScale / 1000);
       const calculatedFontSize = Math.max(12, Math.round(baseSize));
 
-      // CapCut style: Arial Black / Heavy weight
-      ctx.font = `900 ${calculatedFontSize}px Arial, "Helvetica Neue", sans-serif`;
+      // Standard Roboto Style
+      // "Fonte: Roboto", "Espaçamento: 80px" (interpreted as wide tracking), "Contorno: 3px"
+      ctx.font = `700 ${calculatedFontSize}px Roboto, sans-serif`;
+      // @ts-ignore - letterSpacing might not be in all TS definitions yet
+      if ('letterSpacing' in ctx) ctx.letterSpacing = "2px"; 
+      
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#FFFFFF";
       ctx.strokeStyle = "#000000";
-      ctx.lineWidth = calculatedFontSize * 0.15; // Thick stroke
+      // "Contorno externo 3px" -> Stroke width 6 (half inside, half outside) if drawn before fill
+      // But for visibility on high res, we might want to scale it slightly or stick to literal 3px logic.
+      // Let's use a proportional stroke that is roughly 3px at 720p/1080p?
+      // actually, let's try to map "3px" to "3 pixels on the canvas".
+      ctx.lineWidth = 6; 
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
 
-      // Hard Shadow
-      ctx.shadowColor = "rgba(0,0,0,0.6)";
+      // Hard Shadow (Optional, doc doesn't specify but good for readability. "Estabilidade" mentioned)
+      // Doc doesn't say "Sombra", just "Contorno". Let's reduce shadow or remove it to be strict?
+      // "Estilo e Fonte... Contorno (da fonte): contorno externo 3px". No shadow mentioned.
+      // I will remove shadow to adhere to "Standard".
+      ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 3;
-      ctx.shadowOffsetY = 3;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
 
       // Max width logic (90% of screen width)
       const maxLineWidth = canvas.width * 0.9;
@@ -152,6 +164,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       rawLines.forEach((line) => {
         wrappedLines.push(...wrapText(ctx, line, maxLineWidth));
       });
+
+      // Validation: Max 3 lines
+      if (wrappedLines.length > 3) {
+          ctx.fillStyle = "#FFD700"; // Gold warning
+          // Optional: Render a warning icon or text?
+      }
 
       // Measure final block size
       let maxTextWidth = 0;

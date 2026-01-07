@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ExportStatus } from './types';
 import { SubtitleList } from './components/SubtitleList';
 import { VideoPlayer } from './components/VideoPlayer';
+import { Timeline } from './components/Timeline';
 import { FindReplaceModal } from './components/FindReplaceModal';
 import { useGlossary } from './hooks/useGlossary';
 import { GlossaryModal } from './components/GlossaryModal';
@@ -40,11 +41,14 @@ const App: React.FC = () => {
     replaceText,
     applyGlossaryToCurrent,
     shiftAllSubtitles,
+    undo,
+    redo,
   } = useSubtitles(videoState.currentTime, rules);
 
-  const [fontSize, setFontSize] = useState<number>(50);
+  const [fontSize, setFontSize] = useState<number>(18);
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
+  const [selectedSubtitleId, setSelectedSubtitleId] = useState<number | null>(null);
 
 
   const handleSeek = (time: number) => {
@@ -72,9 +76,63 @@ const App: React.FC = () => {
     }
   };
 
+  // Shortcut Handlers
+  const handleSetStart = () => {
+    const targetId = selectedSubtitleId || subtitles.find(s => videoState.currentTime >= s.startTime && videoState.currentTime <= s.endTime)?.id;
+    if (targetId) {
+        updateSubtitle(targetId, { startTime: videoState.currentTime });
+    }
+  };
+
+  const handleSetEnd = () => {
+    const targetId = selectedSubtitleId || subtitles.find(s => videoState.currentTime >= s.startTime && videoState.currentTime <= s.endTime)?.id;
+    if (targetId) {
+        updateSubtitle(targetId, { endTime: videoState.currentTime });
+    }
+  };
+
+  const handleSelectNext = () => {
+      if (!subtitles.length) return;
+      const sorted = [...subtitles].sort((a, b) => a.startTime - b.startTime);
+      const currentIndex = selectedSubtitleId 
+        ? sorted.findIndex(s => s.id === selectedSubtitleId)
+        : -1;
+      
+      // If none selected, pick the first one
+      if (currentIndex === -1) {
+          setSelectedSubtitleId(sorted[0].id);
+          return;
+      }
+      
+      const nextIndex = currentIndex + 1;
+      if (nextIndex < sorted.length) {
+        setSelectedSubtitleId(sorted[nextIndex].id);
+      }
+  };
+
+  const handleSelectPrev = () => {
+      if (!subtitles.length) return;
+      const sorted = [...subtitles].sort((a, b) => a.startTime - b.startTime);
+      const currentIndex = selectedSubtitleId 
+        ? sorted.findIndex(s => s.id === selectedSubtitleId)
+        : -1;
+      
+      if (currentIndex > 0) {
+        setSelectedSubtitleId(sorted[currentIndex - 1].id);
+      } else if (currentIndex === -1) {
+         setSelectedSubtitleId(sorted[0].id);
+      }
+  };
+
   useKeyboardShortcuts({
     onPlayPause: handleTogglePlay,
     onSeek: handleRelativeSeek,
+    onUndo: undo,
+    onRedo: redo,
+    onSetStart: handleSetStart,
+    onSetEnd: handleSetEnd,
+    onPrevSub: handleSelectPrev,
+    onNextSub: handleSelectNext,
     enabled: !!videoState.url,
   });
 
@@ -178,6 +236,15 @@ const App: React.FC = () => {
             onExportStart={() => setExportStatus(ExportStatus.RECORDING)}
             onExportFinish={() => setExportStatus(ExportStatus.COMPLETED)}
           />
+          
+          <div className="mt-4 bg-black rounded-lg border border-gray-800 overflow-hidden">
+            <Timeline 
+                duration={videoState.duration} 
+                currentTime={videoState.currentTime}
+                subtitles={subtitles}
+                onSeek={handleSeek}
+            />
+          </div>
         </div>
 
         {/* Right: Subtitle Editor */}
@@ -191,6 +258,9 @@ const App: React.FC = () => {
             onDeleteSubtitle={deleteSubtitle}
             onAddSubtitle={addSubtitle}
             onSeek={handleSeek}
+            onShiftAll={shiftAllSubtitles}
+            selectedSubtitleId={selectedSubtitleId}
+            onSelect={setSelectedSubtitleId}
           />
         </div>
       </main>

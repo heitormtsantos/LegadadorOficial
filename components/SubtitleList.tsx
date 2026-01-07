@@ -13,6 +13,8 @@ interface SubtitleListProps {
   onAddSubtitle: () => void;
   onSeek: (time: number) => void;
   onShiftAll: (amount: number) => void;
+  selectedSubtitleId: number | null;
+  onSelect: (id: number) => void;
 }
 
 export const SubtitleList: React.FC<SubtitleListProps> = ({
@@ -25,18 +27,27 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
   onAddSubtitle,
   onSeek,
   onShiftAll,
+  selectedSubtitleId,
+  onSelect,
 }) => {
   const activeSubtitleRef = useRef<HTMLDivElement>(null);
+  const selectedSubtitleRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to active subtitle
   useEffect(() => {
-    if (activeSubtitleRef.current) {
+    // Prefer scrolling to selected if user is navigating manually
+    if (selectedSubtitleId && selectedSubtitleRef.current) {
+        selectedSubtitleRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+        });
+    } else if (activeSubtitleRef.current) {
       activeSubtitleRef.current.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
     }
-  }, [currentTime]);
+  }, [currentTime, selectedSubtitleId]);
 
   const isActive = (sub: Subtitle) =>
     currentTime >= sub.startTime && currentTime <= sub.endTime;
@@ -80,8 +91,8 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
             </div>
             <input 
                 type="range" 
-                min="20" 
-                max="150" 
+                min="10" 
+                max="100" 
                 value={fontSize} 
                 onChange={(e) => onFontSizeChange(Number(e.target.value))}
                 className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
@@ -98,13 +109,17 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
         ) : (
           subtitles.map((sub) => {
             const active = isActive(sub);
+            const selected = sub.id === selectedSubtitleId;
             return (
               <div
                 key={sub.id}
-                ref={active ? activeSubtitleRef : null}
-                className={`p-3 rounded-lg border transition-all duration-200 ${
-                  active
+                ref={selected ? selectedSubtitleRef : active ? activeSubtitleRef : null}
+                onClick={() => onSelect(sub.id)}
+                className={`p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
+                  selected
                     ? 'bg-gray-800 border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]'
+                    : active
+                    ? 'bg-gray-800 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.2)]'
                     : 'bg-gray-850 border-gray-700 hover:border-gray-600'
                 }`}
               >

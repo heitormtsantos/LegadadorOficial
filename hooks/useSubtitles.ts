@@ -6,7 +6,6 @@ const STORAGE_KEY = 'subcine_subtitles';
 
 export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRule[]) => {
   const [subtitles, setSubtitles] = useState<Subtitle[]>(() => {
-    // Load from local storage on init
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : [];
@@ -16,6 +15,56 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
     }
   });
 
+  const [history, setHistory] = useState<Subtitle[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Initialize history
+  useEffect(() => {
+    if (history.length === 0) {
+       setHistory([subtitles]);
+       setHistoryIndex(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  const commitToHistory = useCallback((newSubs: Subtitle[]) => {
+    setHistory(prev => {
+        const upToCurrent = prev.slice(0, historyIndex + 1);
+        const next = [...upToCurrent, newSubs];
+        if (next.length > 50) next.shift();
+        return next;
+    });
+    setHistoryIndex(prev => {
+         const nextIdx = prev + 1;
+         // If we were at max capacity (49 because 0-based index for 50 items), we stay at 49 after shift
+         // But if we just grew, we increment.
+         // Simplified: The new index is always the last element of the NEW history.
+         // We calculate length inside setHistory, but here we can't access it easily.
+         // Let's trust that history length grows by 1 unless capped.
+         // Actually, safer to just use setHistory callback logic, but we can't sync state easily.
+         // Let's just increment, clamping at 49.
+         return Math.min(prev + 1, 49);
+    });
+    setSubtitles(newSubs);
+  }, [historyIndex]);
+
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setSubtitles(history[newIndex]);
+    }
+  }, [history, historyIndex]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setSubtitles(history[newIndex]);
+    }
+  }, [history, historyIndex]);
+
+  
   // Save to local storage whenever subtitles change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(subtitles));
@@ -108,26 +157,25 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
             }
           }
 
-          setSubtitles(parsed);
+          commitToHistory(parsed);
         }
       };
       reader.readAsText(file);
     }
-  }, [glossaryRules, applyGlossary]);
+  }, [glossaryRules, applyGlossary, commitToHistory]);
 
   const updateSubtitle = useCallback((id: number, updated: Partial<Subtitle>) => {
-    setSubtitles((prev) =>
-      prev.map((sub) => (sub.id === id ? { ...sub, ...updated } : sub))
-    );
-  }, []);
+    const newSubs = subtitles.map((sub) => (sub.id === id ? { ...sub, ...updated } : sub));
+    commitToHistory(newSubs);
+  }, [subtitles, commitToHistory]);
 
   const deleteSubtitle = useCallback((id: number) => {
-    setSubtitles((prev) => prev.filter((sub) => sub.id !== id));
-  }, []);
+    const newSubs = subtitles.filter((sub) => sub.id !== id);
+    commitToHistory(newSubs);
+  }, [subtitles, commitToHistory]);
 
   const addSubtitle = useCallback(() => {
-    setSubtitles((prev) => {
-      const newId = prev.length > 0 ? Math.max(...prev.map((s) => s.id)) + 1 : 1;
+      const newId = subtitles.length > 0 ? Math.max(...subtitles.map((s) => s.id)) + 1 : 1;
       const start = currentTime;
       const end = start + 3;
       
@@ -138,25 +186,24 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
         text: 'Nova Legenda',
       };
       
-      return [...prev, newSub].sort((a, b) => a.startTime - b.startTime);
-    });
-  }, [currentTime]);
+      const newSubs = [...subtitles, newSub].sort((a, b) => a.startTime - b.startTime);
+      commitToHistory(newSubs);
+  }, [currentTime, subtitles, commitToHistory]);
 
   const clearSubtitles = useCallback(() => {
     if (window.confirm('Tem certeza que deseja apagar todas as legendas?')) {
-      setSubtitles([]);
+      commitToHistory([]);
     }
-  }, []);
+  }, [commitToHistory]);
 
   const shiftAllSubtitles = useCallback((amount: number) => {
-    setSubtitles((prev) =>
-      prev.map((sub) => ({
+    const newSubs = subtitles.map((sub) => ({
         ...sub,
         startTime: Math.max(0, sub.startTime + amount),
         endTime: Math.max(0, sub.endTime + amount),
-      }))
-    );
-  }, []);
+      }));
+    commitToHistory(newSubs);
+  }, [subtitles, commitToHistory]);
 
   const downloadSrt = useCallback(() => {
     const content = generateSRT(subtitles);
@@ -174,43 +221,37 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
   const replaceText = useCallback((find: string, replace: string) => {
     if (!find) return;
     
-    setSubtitles((prev) => {
-      let count = 0;
-      const newSubtitles = prev.map((sub) => {
+    let count = 0;
+    const newSubtitles = subtitles.map((sub) => {
         if (sub.text.includes(find)) {
-          // Use regex with 'g' flag to replace all occurrences in the text
-          const regex = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-          const newText = sub.text.replace(regex, replace);
-          if (newText !== sub.text) {
-            count++;
-            return { ...sub, text: newText };
-          }
+            // Use regex with 'g' flag to replace all occurrences in the text
+            const regex = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+            const newText = sub.text.replace(regex, replace);
+            if (newText !== sub.text) {
+                count++;
+                return { ...sub, text: newText };
+            }
         }
         return sub;
-      });
-      
-      if (count > 0) {
-        alert(`${count} substituições realizadas.`);
-      } else {
-        alert('Nenhuma ocorrência encontrada.');
-      }
-      
-      return newSubtitles;
     });
-  }, []);
+
+    if (count > 0) {
+        alert(`${count} substituições realizadas.`);
+        commitToHistory(newSubtitles);
+    } else {
+        alert('Nenhuma ocorrência encontrada.');
+    }
+  }, [subtitles, commitToHistory]);
 
   const applyGlossaryToCurrent = useCallback((rules: ReplacementRule[]) => {
-    setSubtitles(prev => {
-      const { subtitles: newSubs, changes } = applyGlossary(prev, rules);
+      const { subtitles: newSubs, changes } = applyGlossary(subtitles, rules);
       if (changes > 0) {
         alert(`Glossário aplicado: ${changes} alterações realizadas.`);
-        return newSubs;
+        commitToHistory(newSubs);
       } else {
         alert('Nenhuma alteração necessária com as regras atuais.');
-        return prev;
       }
-    });
-  }, [applyGlossary]);
+  }, [applyGlossary, subtitles, commitToHistory]);
 
   return {
     subtitles,
@@ -223,6 +264,10 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
     downloadSrt,
     replaceText,
     applyGlossaryToCurrent,
-    shiftAllSubtitles
+    shiftAllSubtitles,
+    undo,
+    redo,
+    canUndo: historyIndex > 0,
+    canRedo: historyIndex < history.length - 1
   };
 };
