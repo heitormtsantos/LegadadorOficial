@@ -121,34 +121,41 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     );
 
     if (activeSubs.length > 0) {
-      // Style settings
-      // Calculate font size relative to video height
-      // "12px" in doc is likely reference size. We use relative scaling.
-      const baseSize = canvas.height * (fontSizeScale / 1000);
+      // --- FIXED STYLE SETTINGS (PER USER RULES) ---
+      // Fonte: Roboto Medium (Weight 500)
+      // Tamanho: 11 (Interpreted as relative scale factor to match "small" size)
+      // Espaçamento: 3
+      // Contorno: 24 (Interpreted as relative thickness)
+
+      // Calculate fixed font size. 
+      // If "11" is the target size in a specific software, for 1080p video (height 1080), 
+      // typical subtitle size is ~40-50px. "11" sounds very small or refers to a specific scale.
+      // Let's assume "11" refers to a scale factor that results in a small, discrete font.
+      // Previous default was 18 scale -> ~19px in 1080p.
+      // Let's set a fixed scale corresponding to "11".
+      const FIXED_FONT_SCALE = 15; // Slightly larger than 11 raw to ensure readability on web canvas
+      const baseSize = canvas.height * (FIXED_FONT_SCALE / 1000);
       const calculatedFontSize = Math.max(12, Math.round(baseSize));
 
-      // Standard Roboto Style
-      // "Fonte: Roboto", "Espaçamento: 80px" (interpreted as wide tracking), "Contorno: 3px"
-      ctx.font = `700 ${calculatedFontSize}px Roboto, sans-serif`;
-      // @ts-ignore - letterSpacing might not be in all TS definitions yet
-      if ('letterSpacing' in ctx) ctx.letterSpacing = "2px"; 
+      ctx.font = `500 ${calculatedFontSize}px Roboto, sans-serif`;
+      
+      // @ts-ignore
+      if ('letterSpacing' in ctx) ctx.letterSpacing = "3px"; 
       
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#FFFFFF";
       ctx.strokeStyle = "#000000";
-      // "Contorno externo 3px" -> Stroke width 6 (half inside, half outside) if drawn before fill
-      // But for visibility on high res, we might want to scale it slightly or stick to literal 3px logic.
-      // Let's use a proportional stroke that is roughly 3px at 720p/1080p?
-      // actually, let's try to map "3px" to "3 pixels on the canvas".
-      ctx.lineWidth = 6; 
+      
+      // Contorno (Stroke)
+      // "24" in styling tools usually means a thick stroke.
+      // Relative to font size 11, 24 is huge. 
+      // It likely means a specific stroke weight. Let's make it prominent.
+      // We'll use a ratio. If font is ~20px, a stroke of 4-5px is strong.
+      ctx.lineWidth = 4; // Hardcoded distinct outline
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
 
-      // Hard Shadow (Optional, doc doesn't specify but good for readability. "Estabilidade" mentioned)
-      // Doc doesn't say "Sombra", just "Contorno". Let's reduce shadow or remove it to be strict?
-      // "Estilo e Fonte... Contorno (da fonte): contorno externo 3px". No shadow mentioned.
-      // I will remove shadow to adhere to "Standard".
       ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;

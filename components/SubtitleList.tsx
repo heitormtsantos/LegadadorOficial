@@ -80,24 +80,18 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
            </div>
         </div>
 
-        {/* Font Size Control */}
-        <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
+        {/* Font Size Control - REMOVED per user request (Fixed Style) */}
+        {/* 
+        <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700 opacity-50 pointer-events-none hidden">
             <div className="flex justify-between items-center text-xs text-gray-400">
                 <div className="flex items-center gap-1">
                     <Type size={12} />
-                    <span>Tamanho da Fonte</span>
+                    <span>Tamanho da Fonte (Fixo)</span>
                 </div>
-                <span>{fontSize}%</span>
+                <span>11</span>
             </div>
-            <input 
-                type="range" 
-                min="10" 
-                max="100" 
-                value={fontSize} 
-                onChange={(e) => onFontSizeChange(Number(e.target.value))}
-                className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-            />
         </div>
+        */}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
