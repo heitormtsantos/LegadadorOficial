@@ -121,24 +121,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     );
 
     if (activeSubs.length > 0) {
-      // --- FIXED STYLE SETTINGS (PER USER RULES) ---
+      // --- FIXED STYLE SETTINGS (MATCHING CAPCUT PRESET) ---
       // Fonte: Roboto Medium (Weight 500)
-      // Tamanho: 11 (Interpreted as relative scale factor to match "small" size)
+      // Tamanho: 11 (CapCut Scale) -> Mapped to relative canvas size
       // Espaçamento: 3
-      // Contorno: 24 (Interpreted as relative thickness)
+      // Contorno: 24 (CapCut Scale) -> Mapped to proportional stroke width
 
-      // Calculate fixed font size. 
-      // If "11" is the target size in a specific software, for 1080p video (height 1080), 
-      // typical subtitle size is ~40-50px. "11" sounds very small or refers to a specific scale.
-      // Let's assume "11" refers to a scale factor that results in a small, discrete font.
-      // Previous default was 18 scale -> ~19px in 1080p.
-      // Let's set a fixed scale corresponding to "11".
-      const FIXED_FONT_SCALE = 15; // Slightly larger than 11 raw to ensure readability on web canvas
+      // 1. Font Size "11"
+      // In CapCut, 11 is quite small. We use a scale factor of 15/1000 of height 
+      // to generate a legible but small text (~16px @ 1080p).
+      const FIXED_FONT_SCALE = 15; 
       const baseSize = canvas.height * (FIXED_FONT_SCALE / 1000);
       const calculatedFontSize = Math.max(12, Math.round(baseSize));
 
-      ctx.font = `500 ${calculatedFontSize}px Roboto, sans-serif`;
+      ctx.font = `bold ${calculatedFontSize}px Roboto, sans-serif`;
       
+      // 2. Character Spacing "3"
       // @ts-ignore
       if ('letterSpacing' in ctx) ctx.letterSpacing = "3px"; 
       
@@ -147,19 +145,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       ctx.fillStyle = "#FFFFFF";
       ctx.strokeStyle = "#000000";
       
-      // Contorno (Stroke)
-      // "24" in styling tools usually means a thick stroke.
-      // Relative to font size 11, 24 is huge. 
-      // It likely means a specific stroke weight. Let's make it prominent.
-      // We'll use a ratio. If font is ~20px, a stroke of 4-5px is strong.
-      ctx.lineWidth = 4; // Hardcoded distinct outline
+      // 3. Outline "24"
+      // In styling sliders (0-100), 24 is ~25% intensity.
+      // For stroke width in canvas (centered stroke), a "thick" outline usually means
+      // the stroke width is ~30-50% of the font size.
+      // CapCut/Jianying "24" is quite thick. We'll use 0.5 factor.
+      // Updated for Red Background: Thinner stroke or shadow looks cleaner.
+      // But keeping per spec, maybe slightly reduced to 0.3 to not muddy the red.
+      ctx.lineWidth = Math.max(2, calculatedFontSize * 0.2); 
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
 
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
 
       // Max width logic (90% of screen width)
       const maxLineWidth = canvas.width * 0.9;
@@ -219,9 +219,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       }
 
       // Final Render Start Y (Top of the first line)
-      // Because we draw lines from top down, we need the Y of the top-most line's middle?
-      // No, let's say startY is the top of the bounding box.
       const bboxTopY = bottomY - totalHeight;
+
+      // --- DRAW BACKGROUND BOX (REFERENCE STYLE) ---
+      // Red background box behind the text
+      const boxPaddingX = calculatedFontSize * 0.8; // Reduced padding for tighter look
+      const boxPaddingY = calculatedFontSize * 0.4;
+      const boxWidth = maxTextWidth + boxPaddingX * 2;
+      const boxHeight = totalHeight + boxPaddingY * 2;
 
       // Update Hit Rect for Dragging
       const touchPadding = calculatedFontSize * 0.8; // Larger touch area
