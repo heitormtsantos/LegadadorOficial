@@ -145,7 +145,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const baseSize = canvas.height * (currentScale / 1000);
       const calculatedFontSize = Math.max(16, Math.round(baseSize));
 
-      ctx.font = `bold ${calculatedFontSize}px Roboto, sans-serif`;
+      ctx.font = `500 ${calculatedFontSize}px Roboto, sans-serif`;
       
       // 2. Character Spacing "3"
       // @ts-ignore
