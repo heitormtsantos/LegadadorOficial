@@ -80,18 +80,25 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
            </div>
         </div>
 
-        {/* Font Size Control - REMOVED per user request (Fixed Style) */}
-        {/* 
-        <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700 opacity-50 pointer-events-none hidden">
-            <div className="flex justify-between items-center text-xs text-gray-400">
+        {/* Font Size Control - RE-ENABLED per user request */}
+        <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
+            <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
                 <div className="flex items-center gap-1">
                     <Type size={12} />
-                    <span>Tamanho da Fonte (Fixo)</span>
+                    <span>Tamanho da Fonte</span>
                 </div>
-                <span>11</span>
+                <span>{fontSize}</span>
             </div>
+            <input
+              type="range"
+              min="8"
+              max="40"
+              step="1"
+              value={fontSize}
+              onChange={(e) => onFontSizeChange(Number(e.target.value))}
+              className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-blue-400"
+            />
         </div>
-        */}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

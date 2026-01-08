@@ -127,12 +127,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       // Espaçamento: 3
       // Contorno: 24 (CapCut Scale) -> Mapped to proportional stroke width
 
-      // 1. Font Size "11"
-      // In CapCut, 11 is quite small. We use a scale factor of 15/1000 of height 
-      // to generate a legible but small text (~16px @ 1080p).
-      const FIXED_FONT_SCALE = 15; 
-      const baseSize = canvas.height * (FIXED_FONT_SCALE / 1000);
-      const calculatedFontSize = Math.max(12, Math.round(baseSize));
+      // 1. Font Size Configuration
+      // Default "11" (Scale 35/1000) + User Adjustment (fontSizeScale from props)
+      // fontSizeScale usually comes in range like 0.8 to 2.0 or 10 to 40?
+      // Let's assume the slider returns a relative multiplier or direct size.
+      // If props.fontSize is e.g. "11", we map it to our scale.
+      
+      // Base scale for "Size 11" = 35/1000 of height
+      const BASE_SCALE_11 = 35; 
+      
+      // Calculate modifier based on user input relative to default "11"
+      // Assuming fontSize prop is the "point size" user selects (default 11)
+      const userSizeMultiplier = fontSizeScale / 11;
+      
+      const currentScale = BASE_SCALE_11 * userSizeMultiplier;
+      
+      const baseSize = canvas.height * (currentScale / 1000);
+      const calculatedFontSize = Math.max(16, Math.round(baseSize));
 
       ctx.font = `bold ${calculatedFontSize}px Roboto, sans-serif`;
       
