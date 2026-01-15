@@ -8,6 +8,7 @@ interface VideoPlayerProps {
   subtitles: Subtitle[];
   exportStatus: ExportStatus;
   fontSize: number;
+  outlineSize?: number;
   onTimeUpdate: (time: number) => void;
   onDurationChange: (duration: number) => void;
   onPlayStateChange: (playing: boolean) => void;
@@ -20,6 +21,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   subtitles,
   exportStatus,
   fontSize: fontSizeScale,
+  outlineSize: outlineSizeScale = 24,
   onTimeUpdate,
   onDurationChange,
   onPlayStateChange,
@@ -154,23 +156,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#FFFFFF";
-      ctx.strokeStyle = "#000000";
+      // 3. Outline / Stroke
+      // User requested control over stroke size. Default is 24.
+      // Scaling factor: canvas.height / 1080
+      const strokeScale = canvas.height / 1080;
+      const targetStrokeWidth = outlineSizeScale * strokeScale;
       
-      // 3. Outline "24"
-      // In styling sliders (0-100), 24 is ~25% intensity.
-      // For stroke width in canvas (centered stroke), a "thick" outline usually means
-      // the stroke width is ~30-50% of the font size.
-      // CapCut/Jianying "24" is quite thick. We'll use 0.5 factor.
-      // Updated for Red Background: Thinner stroke or shadow looks cleaner.
-      // But keeping per spec, maybe slightly reduced to 0.3 to not muddy the red.
-      ctx.lineWidth = Math.max(2, calculatedFontSize * 0.2); 
+      // Canvas lineWidth is centered (half in, half out). 
+      // To achieve a visual outline, we might need a thicker line if strictly outside,
+      // but usually "Stroke 24" means the width of the stroke.
+      ctx.lineWidth = Math.max(1, targetStrokeWidth); 
+      ctx.strokeStyle = "#000000";
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
 
       ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
+      ctx.shadowBlur = shadowSizeScale * 2;
+      ctx.shadowOffsetX = shadowSizeScale;
+      ctx.shadowOffsetY = shadowSizeScale;
 
       // Max width logic (90% of screen width)
       const maxLineWidth = canvas.width * 0.9;
@@ -233,11 +236,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const bboxTopY = bottomY - totalHeight;
 
       // --- DRAW BACKGROUND BOX (REFERENCE STYLE) ---
-      // Red background box behind the text
+      // REMOVED: User requested style matching the new reference image (Woman in white dress).
+      // The reference shows clean white text with black outline, NO background box.
+      /*
       const boxPaddingX = calculatedFontSize * 0.8; // Reduced padding for tighter look
       const boxPaddingY = calculatedFontSize * 0.4;
       const boxWidth = maxTextWidth + boxPaddingX * 2;
       const boxHeight = totalHeight + boxPaddingY * 2;
+      */
 
       // Update Hit Rect for Dragging
       const touchPadding = calculatedFontSize * 0.8; // Larger touch area

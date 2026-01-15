@@ -80,24 +80,67 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
            </div>
         </div>
 
-        {/* Font Size Control - RE-ENABLED per user request */}
-        <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
-            <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
-                <div className="flex items-center gap-1">
-                    <Type size={12} />
-                    <span>Tamanho da Fonte</span>
+        {/* Font Size, Outline, and Shadow Controls */}
+        <div className="grid grid-cols-2 gap-2">
+            {/* Font Size */}
+            <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
+                <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
+                    <div className="flex items-center gap-1">
+                        <Type size={12} />
+                        <span>Tamanho</span>
+                    </div>
+                    <span>{fontSize}</span>
                 </div>
-                <span>{fontSize}</span>
+                <input
+                  type="range"
+                  min="8"
+                  max="40"
+                  step="1"
+                  value={fontSize}
+                  onChange={(e) => onFontSizeChange(Number(e.target.value))}
+                  className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-blue-400"
+                />
             </div>
-            <input
-              type="range"
-              min="8"
-              max="40"
-              step="1"
-              value={fontSize}
-              onChange={(e) => onFontSizeChange(Number(e.target.value))}
-              className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-blue-400"
-            />
+
+            {/* Outline Size */}
+            <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700">
+                <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
+                    <div className="flex items-center gap-1">
+                        <Type size={12} className="stroke-[3]" />
+                        <span>Contorno</span>
+                    </div>
+                    <span>{outlineSize}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="40"
+                  step="1"
+                  value={outlineSize}
+                  onChange={(e) => onOutlineSizeChange(Number(e.target.value))}
+                  className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-green-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-green-400"
+                />
+            </div>
+
+            {/* Shadow Size */}
+            <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700 col-span-2">
+                <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
+                    <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-gray-400 rounded-sm shadow-md" />
+                        <span>Sombra</span>
+                    </div>
+                    <span>{shadowSize}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="20"
+                  step="0.5"
+                  value={shadowSize}
+                  onChange={(e) => onShadowSizeChange(Number(e.target.value))}
+                  className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-purple-400"
+                />
+            </div>
         </div>
       </div>
 
