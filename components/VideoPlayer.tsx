@@ -174,16 +174,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const safeShadowScale =
         typeof shadowSizeScale === "number" && isFinite(shadowSizeScale)
           ? shadowSizeScale
-          : 0.7;
+          : 0;
 
-      if (safeShadowScale <= 0) {
+      const normalizedShadow = Math.max(0, safeShadowScale / 5);
+
+      if (normalizedShadow <= 0) {
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
       } else {
-        ctx.shadowColor = "rgba(0,0,0,0.6)";
-        ctx.shadowBlur = 1 + safeShadowScale;
+        ctx.shadowColor = "rgba(0,0,0,0.85)";
+        const baseShadowBlur = calculatedFontSize * 0.25;
+        ctx.shadowBlur = baseShadowBlur * normalizedShadow;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
       }
@@ -288,8 +291,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         // center of the line vertically
         const lineY = bboxTopY + index * lineHeight + lineHeight / 2;
 
+        // 1. Shadow Layer (Behind Outline)
+        // Only draw if shadow is active
+        if (safeShadowScale > 0) {
+            ctx.save();
+            ctx.shadowColor = "rgba(0,0,0,1.0)"; 
+            // Increase blur for softer glow behind
+            ctx.shadowBlur = calculatedFontSize * 0.15 * (safeShadowScale / 3); 
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            // Draw stroke AGAIN with shadow, maybe slightly thicker? 
+            // Actually, using the same stroke width but with shadow is standard.
+            // But to ensure it's visible BEHIND the black outline, we can keep it same width.
+            // The shadow expands outward.
+            ctx.strokeStyle = "black";
+            ctx.strokeText(line, centerX, lineY);
+            ctx.restore();
+        }
+
+        // 2. Solid Outline Layer (No Shadow, Pure Black)
+        ctx.save();
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = "black";
         ctx.strokeText(line, centerX, lineY);
+        ctx.restore();
+        
+        // 3. Fill Layer (Foreground - Crisp White)
+        ctx.save();
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = "white";
         ctx.fillText(line, centerX, lineY);
+        ctx.restore();
       });
     } else {
       subtitleRectRef.current = null;
