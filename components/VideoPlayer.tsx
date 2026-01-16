@@ -179,7 +179,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           ? (calculatedFontSize * letterSpacingScale) / 10
           : 0;
 
-      ctx.font = `400 ${calculatedFontSize}px Roboto, sans-serif`;
+      ctx.font = `500 ${calculatedFontSize}px Roboto, sans-serif`;
       
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
