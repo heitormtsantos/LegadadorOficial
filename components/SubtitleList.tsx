@@ -12,6 +12,8 @@ interface SubtitleListProps {
   onOutlineSizeChange: (size: number) => void;
   shadowSize: number;
   onShadowSizeChange: (size: number) => void;
+  letterSpacing: number;
+  onLetterSpacingChange: (size: number) => void;
   onUpdateSubtitle: (id: number, updated: Partial<Subtitle>) => void;
   onDeleteSubtitle: (id: number) => void;
   onAddSubtitle: () => void;
@@ -30,6 +32,8 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
   onOutlineSizeChange,
   shadowSize,
   onShadowSizeChange,
+  letterSpacing,
+  onLetterSpacingChange,
   onUpdateSubtitle,
   onDeleteSubtitle,
   onAddSubtitle,
@@ -149,6 +153,24 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
                   value={shadowSize}
                   onChange={(e) => onShadowSizeChange(Number(e.target.value))}
                   className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-purple-400"
+                />
+            </div>
+            <div className="flex flex-col gap-1 bg-gray-900 p-2 rounded border border-gray-700 col-span-2">
+                <div className="flex justify-between items-center text-xs text-gray-400 mb-1">
+                    <div className="flex items-center gap-1">
+                        <Type size={12} />
+                        <span>Espaçamento</span>
+                    </div>
+                    <span>{letterSpacing.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                  value={letterSpacing}
+                  onChange={(e) => onLetterSpacingChange(Number(e.target.value))}
+                  className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-pink-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-pink-400"
                 />
             </div>
         </div>

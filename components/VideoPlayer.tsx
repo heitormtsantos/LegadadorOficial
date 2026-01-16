@@ -10,6 +10,7 @@ interface VideoPlayerProps {
   fontSize: number;
   outlineSize?: number;
   shadowSize?: number;
+  letterSpacing?: number;
   onTimeUpdate: (time: number) => void;
   onDurationChange: (duration: number) => void;
   onPlayStateChange: (playing: boolean) => void;
@@ -24,6 +25,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   fontSize: fontSizeScale,
   outlineSize: outlineSizeScale = 24,
   shadowSize: shadowSizeScale = 2,
+  letterSpacing: letterSpacingScale = 0,
   onTimeUpdate,
   onDurationChange,
   onPlayStateChange,
@@ -61,11 +63,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   }, [videoState.url]);
 
+  const measureTextWidthWithSpacing = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    extraSpacing: number
+  ): number => {
+    if (!text) return 0;
+    if (extraSpacing <= 0) {
+      return ctx.measureText(text).width;
+    }
+    const chars = Array.from(text);
+    let width = 0;
+    for (const ch of chars) {
+      width += ctx.measureText(ch).width;
+    }
+    if (chars.length > 1) {
+      width += extraSpacing * (chars.length - 1);
+    }
+    return width;
+  };
+
   // Helper function to wrap text
   const wrapText = (
     ctx: CanvasRenderingContext2D,
     text: string,
-    maxWidth: number
+    maxWidth: number,
+    extraSpacing: number
   ): string[] => {
     if (!text || text.trim() === "") return [];
 
@@ -75,7 +98,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     for (let i = 1; i < words.length; i++) {
       const word = words[i];
-      const width = ctx.measureText(currentLine + " " + word).width;
+      const width = measureTextWidthWithSpacing(
+        ctx,
+        currentLine + " " + word,
+        extraSpacing
+      );
       if (width < maxWidth) {
         currentLine += " " + word;
       } else {
@@ -147,26 +174,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       
       const baseSize = canvas.height * (currentScale / 1000);
       const calculatedFontSize = Math.max(16, Math.round(baseSize));
+      const letterSpacingPx =
+        letterSpacingScale > 0
+          ? (calculatedFontSize * letterSpacingScale) / 10
+          : 0;
 
-      ctx.font = `500 ${calculatedFontSize}px Roboto, sans-serif`;
-      
-      // 2. Character Spacing REMOVED
-      // @ts-ignore
-      if ('letterSpacing' in ctx) ctx.letterSpacing = "0px"; 
+      ctx.font = `400 ${calculatedFontSize}px Roboto, sans-serif`;
       
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#FFFFFF";
-      // 3. Outline / Stroke
-      // User requested control over stroke size. Default is 24.
-      // Scaling factor: canvas.height / 1080
-      const strokeScale = canvas.height / 1080;
-      const targetStrokeWidth = outlineSizeScale * strokeScale;
-      
-      // Canvas lineWidth is centered (half in, half out). 
-      // To achieve a visual outline, we might need a thicker line if strictly outside,
-      // but usually "Stroke 24" means the width of the stroke.
-      ctx.lineWidth = Math.max(1, targetStrokeWidth); 
+      const outlineBaseFactor = calculatedFontSize / 60;
+      const targetStrokeWidth = outlineSizeScale * outlineBaseFactor;
+
+      ctx.lineWidth = Math.max(0.5, targetStrokeWidth); 
       ctx.strokeStyle = "#000000";
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
@@ -199,7 +220,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const wrappedLines: string[] = [];
 
       rawLines.forEach((line) => {
-        wrappedLines.push(...wrapText(ctx, line, maxLineWidth));
+        wrappedLines.push(...wrapText(ctx, line, maxLineWidth, letterSpacingPx));
       });
 
       // Validation: Max 3 lines
@@ -211,8 +232,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       // Measure final block size
       let maxTextWidth = 0;
       wrappedLines.forEach((line) => {
-        const metrics = ctx.measureText(line);
-        if (metrics.width > maxTextWidth) maxTextWidth = metrics.width;
+        const width = measureTextWidthWithSpacing(ctx, line, letterSpacingPx);
+        if (width > maxTextWidth) maxTextWidth = width;
       });
 
       const lineHeight = calculatedFontSize * 1.25;
@@ -286,48 +307,89 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         ctx.restore();
       }
 
-      // Draw Text Lines
       wrappedLines.forEach((line, index) => {
-        // center of the line vertically
         const lineY = bboxTopY + index * lineHeight + lineHeight / 2;
 
-        // 1. Shadow Layer (Behind Outline)
-        // Only draw if shadow is active
-        if (safeShadowScale > 0) {
+        if (letterSpacingPx <= 0) {
+          if (safeShadowScale > 0) {
             ctx.save();
-            ctx.shadowColor = "rgba(0,0,0,1.0)"; 
-            // Increase blur for softer glow behind
-            ctx.shadowBlur = calculatedFontSize * 0.15 * (safeShadowScale / 3); 
+            ctx.shadowColor = "rgba(0,0,0,1.0)";
+            ctx.shadowBlur =
+              calculatedFontSize * 0.15 * (safeShadowScale / 3);
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = 0;
-            // Draw stroke AGAIN with shadow, maybe slightly thicker? 
-            // Actually, using the same stroke width but with shadow is standard.
-            // But to ensure it's visible BEHIND the black outline, we can keep it same width.
-            // The shadow expands outward.
             ctx.strokeStyle = "black";
             ctx.strokeText(line, centerX, lineY);
             ctx.restore();
-        }
+          }
 
-        // 2. Solid Outline Layer (No Shadow, Pure Black)
-        ctx.save();
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.strokeStyle = "black";
-        ctx.strokeText(line, centerX, lineY);
-        ctx.restore();
-        
-        // 3. Fill Layer (Foreground - Crisp White)
-        ctx.save();
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.fillStyle = "white";
-        ctx.fillText(line, centerX, lineY);
-        ctx.restore();
+          ctx.save();
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          ctx.strokeStyle = "black";
+          ctx.strokeText(line, centerX, lineY);
+          ctx.restore();
+
+          ctx.save();
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          ctx.fillStyle = "#FFFFFF";
+          ctx.globalAlpha = 0.95;
+          ctx.fillText(line, centerX, lineY);
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        } else {
+          const totalWidth = measureTextWidthWithSpacing(
+            ctx,
+            line,
+            letterSpacingPx
+          );
+          let currentX = centerX - totalWidth / 2;
+          const chars = Array.from(line);
+
+          chars.forEach((ch) => {
+            const charWidth = ctx.measureText(ch).width;
+            const charCenterX = currentX + charWidth / 2;
+
+            if (safeShadowScale > 0) {
+              ctx.save();
+              ctx.shadowColor = "rgba(0,0,0,1.0)";
+              ctx.shadowBlur =
+                calculatedFontSize * 0.15 * (safeShadowScale / 3);
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 0;
+              ctx.strokeStyle = "black";
+              ctx.strokeText(ch, charCenterX, lineY);
+              ctx.restore();
+            }
+
+            ctx.save();
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            ctx.strokeStyle = "black";
+            ctx.strokeText(ch, charCenterX, lineY);
+            ctx.restore();
+
+            ctx.save();
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.globalAlpha = 0.95;
+            ctx.fillText(ch, charCenterX, lineY);
+            ctx.globalAlpha = 1;
+            ctx.restore();
+
+            currentX += charWidth + letterSpacingPx;
+          });
+        }
       });
     } else {
       subtitleRectRef.current = null;
@@ -343,7 +405,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [subtitles, subtitlePos, fontSizeScale, outlineSizeScale, shadowSizeScale, videoError]);
+  }, [subtitles, subtitlePos, fontSizeScale, outlineSizeScale, shadowSizeScale, letterSpacingScale, videoError]);
 
   const handleExport = () => {
     const video = videoRef.current;
