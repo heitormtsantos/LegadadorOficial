@@ -9,6 +9,7 @@ interface VideoPlayerProps {
   exportStatus: ExportStatus;
   fontSize: number;
   outlineSize?: number;
+  shadowSize?: number;
   onTimeUpdate: (time: number) => void;
   onDurationChange: (duration: number) => void;
   onPlayStateChange: (playing: boolean) => void;
@@ -22,6 +23,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   exportStatus,
   fontSize: fontSizeScale,
   outlineSize: outlineSizeScale = 24,
+  shadowSize: shadowSizeScale = 2,
   onTimeUpdate,
   onDurationChange,
   onPlayStateChange,
@@ -85,7 +87,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return lines;
   };
 
-  // The Rendering Loop
   const drawFrame = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -170,10 +171,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
 
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = shadowSizeScale * 2;
-      ctx.shadowOffsetX = shadowSizeScale;
-      ctx.shadowOffsetY = shadowSizeScale;
+      const safeShadowScale =
+        typeof shadowSizeScale === "number" && isFinite(shadowSizeScale)
+          ? shadowSizeScale
+          : 0.7;
+
+      if (safeShadowScale <= 0) {
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      } else {
+        ctx.shadowColor = "rgba(0,0,0,0.6)";
+        ctx.shadowBlur = 1 + safeShadowScale;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      }
 
       // Max width logic (90% of screen width)
       const maxLineWidth = canvas.width * 0.9;
@@ -282,18 +295,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       subtitleRectRef.current = null;
     }
 
-    // Loop
+    // Loop contínuo para garantir fluidez máxima do vídeo
     animationFrameRef.current = requestAnimationFrame(drawFrame);
   };
 
-  // Start/Stop Rendering loop
   useEffect(() => {
     animationFrameRef.current = requestAnimationFrame(drawFrame);
     return () => {
       if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [subtitles, subtitlePos, fontSizeScale, videoError]); // Re-bind if these change
+  }, [subtitles, subtitlePos, fontSizeScale, outlineSizeScale, shadowSizeScale, videoError]);
 
   const handleExport = () => {
     const video = videoRef.current;

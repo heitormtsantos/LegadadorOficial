@@ -8,6 +8,10 @@ interface SubtitleListProps {
   currentTime: number;
   fontSize: number;
   onFontSizeChange: (size: number) => void;
+  outlineSize: number;
+  onOutlineSizeChange: (size: number) => void;
+  shadowSize: number;
+  onShadowSizeChange: (size: number) => void;
   onUpdateSubtitle: (id: number, updated: Partial<Subtitle>) => void;
   onDeleteSubtitle: (id: number) => void;
   onAddSubtitle: () => void;
@@ -22,6 +26,10 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
   currentTime,
   fontSize,
   onFontSizeChange,
+  outlineSize,
+  onOutlineSizeChange,
+  shadowSize,
+  onShadowSizeChange,
   onUpdateSubtitle,
   onDeleteSubtitle,
   onAddSubtitle,
@@ -32,6 +40,8 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
 }) => {
   const activeSubtitleRef = useRef<HTMLDivElement>(null);
   const selectedSubtitleRef = useRef<HTMLDivElement>(null);
+
+  const activeSubId = subtitles.find(s => currentTime >= s.startTime && currentTime <= s.endTime)?.id;
 
   // Auto-scroll to active subtitle
   useEffect(() => {
@@ -47,7 +57,7 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
         block: 'center',
       });
     }
-  }, [currentTime, selectedSubtitleId]);
+  }, [activeSubId, selectedSubtitleId]);
 
   const isActive = (sub: Subtitle) =>
     currentTime >= sub.startTime && currentTime <= sub.endTime;
@@ -134,8 +144,8 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
                 <input
                   type="range"
                   min="0"
-                  max="20"
-                  step="0.5"
+                  max="3"
+                  step="0.1"
                   value={shadowSize}
                   onChange={(e) => onShadowSizeChange(Number(e.target.value))}
                   className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-purple-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:hover:bg-purple-400"
@@ -158,7 +168,10 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
               <div
                 key={sub.id}
                 ref={selected ? selectedSubtitleRef : active ? activeSubtitleRef : null}
-                onClick={() => onSelect(sub.id)}
+                onClick={() => {
+                  onSelect(sub.id);
+                  onSeek(sub.startTime);
+                }}
                 className={`p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
                   selected
                     ? 'bg-gray-800 border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]'
