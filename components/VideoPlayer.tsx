@@ -150,9 +150,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       ctx.font = `500 ${calculatedFontSize}px Roboto, sans-serif`;
       
-      // 2. Character Spacing "3"
+      // 2. Character Spacing REMOVED
       // @ts-ignore
-      if ('letterSpacing' in ctx) ctx.letterSpacing = "3px"; 
+      if ('letterSpacing' in ctx) ctx.letterSpacing = "0px"; 
       
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";

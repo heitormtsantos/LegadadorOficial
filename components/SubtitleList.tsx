@@ -144,7 +144,7 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
                 <input
                   type="range"
                   min="0"
-                  max="3"
+                  max="20"
                   step="0.1"
                   value={shadowSize}
                   onChange={(e) => onShadowSizeChange(Number(e.target.value))}
