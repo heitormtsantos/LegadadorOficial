@@ -46,9 +46,9 @@ const App: React.FC = () => {
   } = useSubtitles(videoState.currentTime, rules);
 
   const [fontSize, setFontSize] = useState<number>(11);
-  const [outlineSize, setOutlineSize] = useState<number>(7);
+  const [outlineSize, setOutlineSize] = useState<number>(6);
   const [shadowSize, setShadowSize] = useState<number>(0);
-  const [letterSpacing, setLetterSpacing] = useState<number>(0.5);
+  const [letterSpacing, setLetterSpacing] = useState<number>(0.15);
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<number | null>(null);
