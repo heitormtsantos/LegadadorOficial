@@ -1,11 +1,12 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Subtitle, VideoState, ExportStatus } from "../types";
+import { Subtitle, VideoState, ExportStatus, LooseText } from "../types";
 import { secondsToSrtTime } from "../utils/srtHelper";
 import { Play, Pause, Download, MonitorPlay, Move } from "lucide-react";
 
 interface VideoPlayerProps {
   videoState: VideoState;
   subtitles: Subtitle[];
+  looseTexts?: LooseText[];
   exportStatus: ExportStatus;
   fontSize: number;
   outlineSize?: number;
@@ -16,11 +17,13 @@ interface VideoPlayerProps {
   onPlayStateChange: (playing: boolean) => void;
   onExportStart: () => void;
   onExportFinish: (blobUrl: string) => void;
+  onUpdateLooseText?: (id: number, updates: Partial<LooseText>) => void;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   videoState,
   subtitles,
+  looseTexts = [],
   exportStatus,
   fontSize: fontSizeScale,
   outlineSize: outlineSizeScale = 24,
@@ -31,6 +34,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onPlayStateChange,
   onExportStart,
   onExportFinish,
+  onUpdateLooseText,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,7 +46,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [videoError, setVideoError] = useState<string | null>(null);
 
   // Subtitle Positioning State
-  // x: center percentage (0.0 - 1.0), y: bottom anchor percentage (0.0 - 1.0)
   const [subtitlePos, setSubtitlePos] = useState({ x: 0.5, y: 0.85 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -54,10 +57,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     h: number;
   } | null>(null);
 
+  // Loose Text Dragging State
+  const [draggingLooseTextId, setDraggingLooseTextId] = useState<number | null>(null);
+  const [hoveringLooseTextId, setHoveringLooseTextId] = useState<number | null>(null);
+  const looseTextRectsRef = useRef<Map<number, { x: number; y: number; w: number; h: number }>>(new Map());
+
   // Setup video source
   useEffect(() => {
     if (videoState.url && videoRef.current) {
-      setVideoError(null); // Reset error on new video
+      setVideoError(null);
       videoRef.current.src = videoState.url;
       setDownloadUrl(null);
     }
@@ -83,7 +91,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return width;
   };
 
-  // Helper function to wrap text
   const wrapText = (
     ctx: CanvasRenderingContext2D,
     text: string,
@@ -118,7 +125,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    // Safety check
     if (!video || !canvas || videoError) {
       animationFrameRef.current = requestAnimationFrame(drawFrame);
       return;
@@ -130,7 +136,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       return;
     }
 
-    // Match canvas size to video size
     if (video.videoWidth > 0 && video.videoHeight > 0) {
       if (
         canvas.width !== video.videoWidth ||
@@ -144,60 +149,42 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     // 1. Draw Video Frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // 2. Draw Subtitles
     const currentTime = video.currentTime;
+
+    // --- SHARED STYLE CONFIG ---
+    // Base scale for "Size 11" = 35/1000 of height
+    const BASE_SCALE_11 = 35;
+    const userSizeMultiplier = fontSizeScale / 11;
+    const currentScale = BASE_SCALE_11 * userSizeMultiplier;
+    const baseSize = canvas.height * (currentScale / 1000);
+    const calculatedFontSize = Math.max(16, Math.round(baseSize));
+    const letterSpacingPx =
+      letterSpacingScale > 0
+        ? (calculatedFontSize * letterSpacingScale) / 10
+        : 0;
+
+    // Common Text Settings
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const outlineBaseFactor = calculatedFontSize / 60;
+    const targetStrokeWidth = outlineSizeScale * outlineBaseFactor;
+    
+    // Shadow
+    const safeShadowScale = typeof shadowSizeScale === "number" && isFinite(shadowSizeScale) ? shadowSizeScale : 0;
+    const normalizedShadow = Math.max(0, safeShadowScale / 5);
+
+    // 2. Draw Subtitles
     const activeSubs = subtitles.filter(
       (s) => currentTime >= s.startTime && currentTime <= s.endTime
     );
 
     if (activeSubs.length > 0) {
-      // --- FIXED STYLE SETTINGS (MATCHING CAPCUT PRESET) ---
-      // Fonte: Roboto Medium (Weight 500)
-      // Tamanho: 11 (CapCut Scale) -> Mapped to relative canvas size
-      // Espaçamento: 3
-      // Contorno: 24 (CapCut Scale) -> Mapped to proportional stroke width
-
-      // 1. Font Size Configuration
-      // Default "11" (Scale 35/1000) + User Adjustment (fontSizeScale from props)
-      // fontSizeScale usually comes in range like 0.8 to 2.0 or 10 to 40?
-      // Let's assume the slider returns a relative multiplier or direct size.
-      // If props.fontSize is e.g. "11", we map it to our scale.
-      
-      // Base scale for "Size 11" = 35/1000 of height
-      const BASE_SCALE_11 = 35; 
-      
-      // Calculate modifier based on user input relative to default "11"
-      // Assuming fontSize prop is the "point size" user selects (default 11)
-      const userSizeMultiplier = fontSizeScale / 11;
-      
-      const currentScale = BASE_SCALE_11 * userSizeMultiplier;
-      
-      const baseSize = canvas.height * (currentScale / 1000);
-      const calculatedFontSize = Math.max(16, Math.round(baseSize));
-      const letterSpacingPx =
-        letterSpacingScale > 0
-          ? (calculatedFontSize * letterSpacingScale) / 10
-          : 0;
-
       ctx.font = `500 ${calculatedFontSize}px Roboto, sans-serif`;
-      
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
       ctx.fillStyle = "#FFFFFF";
-      const outlineBaseFactor = calculatedFontSize / 60;
-      const targetStrokeWidth = outlineSizeScale * outlineBaseFactor;
-
-      ctx.lineWidth = Math.max(0.5, targetStrokeWidth); 
+      ctx.lineWidth = Math.max(0.5, targetStrokeWidth);
       ctx.strokeStyle = "#000000";
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
-
-      const safeShadowScale =
-        typeof shadowSizeScale === "number" && isFinite(shadowSizeScale)
-          ? shadowSizeScale
-          : 0;
-
-      const normalizedShadow = Math.max(0, safeShadowScale / 5);
 
       if (normalizedShadow <= 0) {
         ctx.shadowColor = "transparent";
@@ -212,10 +199,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         ctx.shadowOffsetY = 0;
       }
 
-      // Max width logic (90% of screen width)
       const maxLineWidth = canvas.width * 0.9;
-
-      // Process Text Block
       const rawLines = activeSubs.map((s) => s.text.split("\n")).flat();
       const wrappedLines: string[] = [];
 
@@ -223,13 +207,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         wrappedLines.push(...wrapText(ctx, line, maxLineWidth, letterSpacingPx));
       });
 
-      // Validation: Max 3 lines
       if (wrappedLines.length > 3) {
-          ctx.fillStyle = "#FFD700"; // Gold warning
-          // Optional: Render a warning icon or text?
+         ctx.fillStyle = "#FFD700"; 
       }
 
-      // Measure final block size
       let maxTextWidth = 0;
       wrappedLines.forEach((line) => {
         const width = measureTextWidthWithSpacing(ctx, line, letterSpacingPx);
@@ -239,51 +220,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const lineHeight = calculatedFontSize * 1.25;
       const totalHeight = wrappedLines.length * lineHeight;
 
-      // --- POSITIONING LOGIC WITH CLAMPING ---
-
-      // Target position based on user preference
       let centerX = canvas.width * subtitlePos.x;
       let bottomY = canvas.height * subtitlePos.y;
 
-      // Safe Zone (padding from edges)
       const padding = Math.max(20, canvas.width * 0.05);
       const halfWidth = maxTextWidth / 2;
 
-      // Clamp Horizontal (Keep text fully inside left/right)
       if (centerX - halfWidth < padding) {
         centerX = halfWidth + padding;
       } else if (centerX + halfWidth > canvas.width - padding) {
         centerX = canvas.width - padding - halfWidth;
       }
 
-      // Clamp Vertical (Keep text fully inside top/bottom)
-      // Note: We render from top down, but anchor is bottom.
-      // Top of text block is (bottomY - totalHeight)
-
-      // Prevent going off top
       if (bottomY - totalHeight < padding) {
         bottomY = totalHeight + padding;
       }
-      // Prevent going off bottom
       if (bottomY > canvas.height - padding) {
         bottomY = canvas.height - padding;
       }
 
-      // Final Render Start Y (Top of the first line)
       const bboxTopY = bottomY - totalHeight;
-
-      // --- DRAW BACKGROUND BOX (REFERENCE STYLE) ---
-      // REMOVED: User requested style matching the new reference image (Woman in white dress).
-      // The reference shows clean white text with black outline, NO background box.
-      /*
-      const boxPaddingX = calculatedFontSize * 0.8; // Reduced padding for tighter look
-      const boxPaddingY = calculatedFontSize * 0.4;
-      const boxWidth = maxTextWidth + boxPaddingX * 2;
-      const boxHeight = totalHeight + boxPaddingY * 2;
-      */
-
-      // Update Hit Rect for Dragging
-      const touchPadding = calculatedFontSize * 0.8; // Larger touch area
+      const touchPadding = calculatedFontSize * 0.8;
       subtitleRectRef.current = {
         x: centerX - halfWidth - touchPadding,
         y: bboxTopY - touchPadding,
@@ -291,11 +248,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         h: totalHeight + touchPadding * 2,
       };
 
-      // Draw Visual Feedback for Dragging
       if (isDragging || isHoveringSubtitle) {
         ctx.save();
         ctx.shadowColor = "transparent";
-        ctx.strokeStyle = "rgba(59, 130, 246, 0.9)"; // Bright Blue
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.9)";
         ctx.lineWidth = 3;
         ctx.setLineDash([10, 5]);
         ctx.strokeRect(
@@ -309,46 +265,164 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       wrappedLines.forEach((line, index) => {
         const lineY = bboxTopY + index * lineHeight + lineHeight / 2;
+        drawTextLine(ctx, line, centerX, lineY, letterSpacingPx, safeShadowScale, calculatedFontSize);
+      });
+    } else {
+      subtitleRectRef.current = null;
+    }
 
+    // 3. Draw Loose Texts
+    const activeLooseTexts = looseTexts.filter(
+        (t) => currentTime >= t.startTime && currentTime <= t.endTime
+    );
+
+    looseTextRectsRef.current.clear();
+
+    if (activeLooseTexts.length > 0) {
+        activeLooseTexts.forEach(text => {
+            // Default position if not set (Center)
+            const posX = text.x !== undefined ? text.x : 0.5;
+            const posY = text.y !== undefined ? text.y : 0.5;
+
+            // Calculate font size for this specific text
+            // If text has its own fontSize, use it relative to base scale (similar to global fontSize)
+            // Default global fontSize is usually around 11 in the UI which maps to BASE_SCALE_11 = 35
+            const localFontSize = text.fontSize || fontSizeScale;
+            const localUserSizeMultiplier = localFontSize / 11;
+            const localCurrentScale = BASE_SCALE_11 * localUserSizeMultiplier;
+            const localBaseSize = canvas.height * (localCurrentScale / 1000);
+            const localCalculatedFontSize = Math.max(16, Math.round(localBaseSize));
+            
+            // Recalculate derived values with local font size
+            const localOutlineBaseFactor = localCalculatedFontSize / 60;
+            const localTargetStrokeWidth = outlineSizeScale * localOutlineBaseFactor;
+            const localLetterSpacingPx = letterSpacingScale > 0
+                ? (localCalculatedFontSize * letterSpacingScale) / 10
+                : 0;
+
+            ctx.font = `500 ${localCalculatedFontSize}px Roboto, sans-serif`;
+            ctx.fillStyle = "#FFFFFF";
+            ctx.lineWidth = Math.max(0.5, localTargetStrokeWidth);
+            ctx.strokeStyle = "#000000";
+            ctx.lineJoin = "round";
+            ctx.miterLimit = 2;
+            
+             if (normalizedShadow <= 0) {
+                ctx.shadowColor = "transparent";
+                ctx.shadowBlur = 0;
+            } else {
+                ctx.shadowColor = "rgba(0,0,0,0.85)";
+                const baseShadowBlur = localCalculatedFontSize * 0.25;
+                ctx.shadowBlur = baseShadowBlur * normalizedShadow;
+            }
+
+            const maxLineWidth = canvas.width * 0.9;
+            // Handle newlines by splitting first
+            const rawLines = text.text.split('\n');
+            const wrappedLines: string[] = [];
+            
+            rawLines.forEach(line => {
+                wrappedLines.push(...wrapText(ctx, line, maxLineWidth, localLetterSpacingPx));
+            });
+
+            let maxTextWidth = 0;
+            wrappedLines.forEach((line) => {
+                const width = measureTextWidthWithSpacing(ctx, line, localLetterSpacingPx);
+                if (width > maxTextWidth) maxTextWidth = width;
+            });
+
+            const lineHeight = localCalculatedFontSize * 1.25;
+            const totalHeight = wrappedLines.length * lineHeight;
+
+            let centerX = canvas.width * posX;
+            let centerY = canvas.height * posY;
+            
+            // Anchor center-center for loose texts (easier for placement "on objects")
+            // Or maybe center-bottom to match subtitles?
+            // Let's stick to center-center for "labels" on objects.
+            
+            // Padding
+            const padding = 10;
+            const halfWidth = maxTextWidth / 2;
+            const halfHeight = totalHeight / 2;
+            
+            // Clamp
+            if (centerX - halfWidth < padding) centerX = halfWidth + padding;
+            if (centerX + halfWidth > canvas.width - padding) centerX = canvas.width - padding - halfWidth;
+            if (centerY - halfHeight < padding) centerY = halfHeight + padding;
+            if (centerY + halfHeight > canvas.height - padding) centerY = canvas.height - padding - halfHeight;
+
+            // Store Hit Rect
+            const touchPadding = localCalculatedFontSize * 0.5;
+            looseTextRectsRef.current.set(text.id, {
+                x: centerX - halfWidth - touchPadding,
+                y: centerY - halfHeight - touchPadding,
+                w: maxTextWidth + touchPadding * 2,
+                h: totalHeight + touchPadding * 2
+            });
+
+            // Visual Feedback
+            const isBeingDragged = draggingLooseTextId === text.id;
+            const isHovered = hoveringLooseTextId === text.id;
+
+            if (isBeingDragged || isHovered) {
+                ctx.save();
+                ctx.shadowColor = "transparent";
+                ctx.strokeStyle = "rgba(255, 165, 0, 0.9)"; // Orange for loose texts
+                ctx.lineWidth = 3;
+                ctx.setLineDash([5, 3]);
+                 const rect = looseTextRectsRef.current.get(text.id)!;
+                ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+                ctx.restore();
+            }
+
+            // Draw Lines
+            const startY = centerY - (totalHeight / 2) + (lineHeight / 2);
+            wrappedLines.forEach((line, index) => {
+                const lineY = startY + index * lineHeight;
+                drawTextLine(ctx, line, centerX, lineY, localLetterSpacingPx, safeShadowScale, localCalculatedFontSize);
+            });
+        });
+    }
+
+    animationFrameRef.current = requestAnimationFrame(drawFrame);
+  };
+
+  const drawTextLine = (
+    ctx: CanvasRenderingContext2D, 
+    line: string, 
+    x: number, 
+    y: number, 
+    letterSpacingPx: number,
+    safeShadowScale: number,
+    calculatedFontSize: number
+  ) => {
         if (letterSpacingPx <= 0) {
           if (safeShadowScale > 0) {
             ctx.save();
             ctx.shadowColor = "rgba(0,0,0,1.0)";
-            ctx.shadowBlur =
-              calculatedFontSize * 0.15 * (safeShadowScale / 3);
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
+            ctx.shadowBlur = calculatedFontSize * 0.15 * (safeShadowScale / 3);
             ctx.strokeStyle = "black";
-            ctx.strokeText(line, centerX, lineY);
+            ctx.strokeText(line, x, y);
             ctx.restore();
           }
 
           ctx.save();
           ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
           ctx.strokeStyle = "black";
-          ctx.strokeText(line, centerX, lineY);
+          ctx.strokeText(line, x, y);
           ctx.restore();
 
           ctx.save();
           ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
           ctx.fillStyle = "#FFFFFF";
           ctx.globalAlpha = 0.95;
-          ctx.fillText(line, centerX, lineY);
+          ctx.fillText(line, x, y);
           ctx.globalAlpha = 1;
           ctx.restore();
         } else {
-          const totalWidth = measureTextWidthWithSpacing(
-            ctx,
-            line,
-            letterSpacingPx
-          );
-          let currentX = centerX - totalWidth / 2;
+          const totalWidth = measureTextWidthWithSpacing(ctx, line, letterSpacingPx);
+          let currentX = x - totalWidth / 2;
           const chars = Array.from(line);
 
           chars.forEach((ch) => {
@@ -358,46 +432,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             if (safeShadowScale > 0) {
               ctx.save();
               ctx.shadowColor = "rgba(0,0,0,1.0)";
-              ctx.shadowBlur =
-                calculatedFontSize * 0.15 * (safeShadowScale / 3);
-              ctx.shadowOffsetX = 0;
-              ctx.shadowOffsetY = 0;
+              ctx.shadowBlur = calculatedFontSize * 0.15 * (safeShadowScale / 3);
               ctx.strokeStyle = "black";
-              ctx.strokeText(ch, charCenterX, lineY);
+              ctx.strokeText(ch, charCenterX, y);
               ctx.restore();
             }
 
             ctx.save();
             ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
             ctx.strokeStyle = "black";
-            ctx.strokeText(ch, charCenterX, lineY);
+            ctx.strokeText(ch, charCenterX, y);
             ctx.restore();
 
             ctx.save();
             ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
             ctx.fillStyle = "#FFFFFF";
             ctx.globalAlpha = 0.95;
-            ctx.fillText(ch, charCenterX, lineY);
+            ctx.fillText(ch, charCenterX, y);
             ctx.globalAlpha = 1;
             ctx.restore();
 
             currentX += charWidth + letterSpacingPx;
           });
         }
-      });
-    } else {
-      subtitleRectRef.current = null;
-    }
-
-    // Loop contínuo para garantir fluidez máxima do vídeo
-    animationFrameRef.current = requestAnimationFrame(drawFrame);
-  };
+  }
 
   useEffect(() => {
     animationFrameRef.current = requestAnimationFrame(drawFrame);
@@ -405,40 +463,47 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [subtitles, subtitlePos, fontSizeScale, outlineSizeScale, shadowSizeScale, letterSpacingScale, videoError]);
+  }, [subtitles, looseTexts, subtitlePos, draggingLooseTextId, hoveringLooseTextId, fontSizeScale, outlineSizeScale, shadowSizeScale, letterSpacingScale, videoError]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (video) {
+      if (video.paused) {
+        video.play();
+      } else {
+        video.pause();
+      }
+    }
+  };
+
+  const handleVideoError = () => {
+      if (videoRef.current && videoRef.current.error) {
+          setVideoError(`Error ${videoRef.current.error.code}: ${videoRef.current.error.message}`);
+      } else {
+          setVideoError("An unknown video error occurred");
+      }
+  };
 
   const handleExport = () => {
-    const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-
-    onExportStart();
-    setDownloadUrl(null);
-
-    const stream = canvas.captureStream(30);
-
-    let audioTrack: MediaStreamTrack | undefined;
-    try {
-      // @ts-ignore
-      const videoStream = video.captureStream
-        ? video.captureStream()
-        : video.mozCaptureStream
-        ? video.mozCaptureStream()
-        : null;
-      if (videoStream) {
-        audioTrack = videoStream.getAudioTracks()[0];
-        if (audioTrack) {
-          stream.addTrack(audioTrack);
-        }
-      }
-    } catch (e) {
-      console.warn("Could not capture audio track.", e);
+    const video = videoRef.current;
+    
+    if (!canvas || !video) return;
+    
+    if (!MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+        alert('Seu navegador não suporta a exportação de vídeo em WebM/VP9.');
+        return;
     }
 
+    onExportStart();
+    
+    video.currentTime = 0;
+    if (video.paused) video.play();
+
+    const stream = canvas.captureStream(30);
     const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : "video/webm",
+      mimeType: "video/webm;codecs=vp9",
+      videoBitsPerSecond: 5000000 
     });
 
     mediaRecorderRef.current = mediaRecorder;
@@ -451,48 +516,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     };
 
     mediaRecorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      const blob = new Blob(chunksRef.current, {
+        type: "video/webm",
+      });
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
       onExportFinish(url);
-
-      video.currentTime = 0;
-      onPlayStateChange(false);
-
-      // Auto download
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = getDownloadFileName();
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      mediaRecorderRef.current = null;
     };
 
-    video.currentTime = 0;
-    video.play();
     mediaRecorder.start();
 
-    video.onended = () => {
-      if (mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
+    const onEnded = () => {
+        if (mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        video.removeEventListener('ended', onEnded);
     };
-  };
-
-  const togglePlay = () => {
-    if (videoRef.current) {
-      if (videoState.isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current
-          .play()
-          .catch((err) =>
-            setVideoError(
-              `Error playing video: ${err.name} - ${err.message}`
-            )
-          );
-      }
-    }
+    
+    video.addEventListener('ended', onEnded);
   };
 
   // --- MOUSE INTERACTION ---
@@ -510,52 +552,92 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!subtitleRectRef.current) return;
     const { x, y } = getMousePos(e);
 
-    if (
-      x >= subtitleRectRef.current.x &&
-      x <= subtitleRectRef.current.x + subtitleRectRef.current.w &&
-      y >= subtitleRectRef.current.y &&
-      y <= subtitleRectRef.current.y + subtitleRectRef.current.h
-    ) {
-      setIsDragging(true);
+    // 1. Check Loose Texts first (they are usually overlays)
+    let hitLooseTextId: number | null = null;
+    looseTextRectsRef.current.forEach((rect, id) => {
+        if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+            hitLooseTextId = id;
+        }
+    });
 
-      // Calculate offset relative to the Anchor Point (center bottom usually)
-      // We reverse calculate where the anchor is currently onscreen
-      const rect = subtitleRectRef.current;
-      // Note: rect.x is left edge. center is rect.x + rect.w/2
-      const currentAnchorX = rect.x + rect.w / 2;
-      const currentAnchorY = rect.y + rect.h - rect.h * 0.1; // approx bottom, removing padding
+    if (hitLooseTextId !== null) {
+        setDraggingLooseTextId(hitLooseTextId);
+        
+        // Calculate offset from CENTER of the text
+        const rect = looseTextRectsRef.current.get(hitLooseTextId)!;
+        const centerX = rect.x + rect.w / 2;
+        const centerY = rect.y + rect.h / 2;
+        
+        setDragOffset({
+            x: x - centerX,
+            y: y - centerY
+        });
+        return;
+    }
 
-      setDragOffset({
-        x: x - currentAnchorX,
-        y: y - currentAnchorY,
-      });
+    // 2. Check Subtitles
+    if (subtitleRectRef.current) {
+      if (
+        x >= subtitleRectRef.current.x &&
+        x <= subtitleRectRef.current.x + subtitleRectRef.current.w &&
+        y >= subtitleRectRef.current.y &&
+        y <= subtitleRectRef.current.y + subtitleRectRef.current.h
+      ) {
+        setIsDragging(true);
+
+        const rect = subtitleRectRef.current;
+        const currentAnchorX = rect.x + rect.w / 2;
+        const currentAnchorY = rect.y + rect.h - rect.h * 0.1; 
+
+        setDragOffset({
+          x: x - currentAnchorX,
+          y: y - currentAnchorY,
+        });
+      }
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     const { x, y } = getMousePos(e);
     const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    if (isDragging && canvas) {
-      // Apply offset to get back to anchor position
+    // Handle Loose Text Drag
+    if (draggingLooseTextId !== null && onUpdateLooseText) {
+        const targetCenterX = x - dragOffset.x;
+        const targetCenterY = y - dragOffset.y;
+        
+        const newX = targetCenterX / canvas.width;
+        const newY = targetCenterY / canvas.height;
+        
+        onUpdateLooseText(draggingLooseTextId, { x: newX, y: newY });
+        return;
+    }
+
+    // Handle Subtitle Drag
+    if (isDragging) {
       const targetAnchorX = x - dragOffset.x;
       const targetAnchorY = y - dragOffset.y;
 
-      // Normalize to 0-1
       const newX = targetAnchorX / canvas.width;
       const newY = targetAnchorY / canvas.height;
 
-      // We do NOT clamp here (we let user drag anywhere), but render loop clamps visual.
-      // This feels smoother.
       setSubtitlePos({ x: newX, y: newY });
       return;
     }
 
-    // Check hover
-    if (subtitleRectRef.current) {
+    // Handle Hover
+    let hitLooseTextId: number | null = null;
+    looseTextRectsRef.current.forEach((rect, id) => {
+        if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+            hitLooseTextId = id;
+        }
+    });
+    setHoveringLooseTextId(hitLooseTextId);
+
+    if (hitLooseTextId === null && subtitleRectRef.current) {
       const isHit =
         x >= subtitleRectRef.current.x &&
         x <= subtitleRectRef.current.x + subtitleRectRef.current.w &&
@@ -568,11 +650,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    if (isDragging) {
+    if (draggingLooseTextId !== null) {
+        setDraggingLooseTextId(null);
+    } else if (isDragging) {
       setIsDragging(false);
     } else {
-      // Only toggle play if we weren't dragging and not clicking a subtitle
-      if (!isHoveringSubtitle) {
+      if (!isHoveringSubtitle && hoveringLooseTextId === null) {
         togglePlay();
       }
     }
@@ -580,149 +663,121 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   const handleMouseLeave = () => {
     setIsDragging(false);
+    setDraggingLooseTextId(null);
     setIsHoveringSubtitle(false);
-  };
-
-  const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    const error = e.currentTarget.error;
-    let errorMessage = "An unknown video error occurred.";
-    if (error) {
-       switch (error.code) {
-         case 1: // MEDIA_ERR_ABORTED
-           errorMessage = "The video playback was aborted.";
-           break;
-         case 2: // MEDIA_ERR_NETWORK
-           errorMessage = "A network error caused the video to fail to load.";
-           break;
-         case 3: // MEDIA_ERR_DECODE
-           errorMessage = "The video could not be decoded, likely due to corruption or an unsupported format.";
-           break;
-         case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-           errorMessage = "The video format is not supported.";
-           break;
-         default:
-            errorMessage = `An unexpected error occurred. Error code: ${error.code}`;
-       }
-    }
-    setVideoError(errorMessage);
-  }
-
-  const getDownloadFileName = () => {
-    if (videoState.file?.name) {
-      const originalName = videoState.file.name;
-      const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-      return `${nameWithoutExt}_legendado.webm`;
-    }
-    return "video_legendado.webm";
+    setHoveringLooseTextId(null);
   };
 
   return (
-    <div className="flex flex-col gap-4 h-full">
-      {/* Viewer Area */}
-      <div className="relative bg-black rounded-lg overflow-hidden shadow-2xl border border-gray-800 flex-1 flex items-center justify-center group select-none">
+    <div className="relative flex-1 flex flex-col min-h-0 bg-black group">
+      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+        {/* Hidden Video Element */}
         <video
           ref={videoRef}
-          className="absolute opacity-0 pointer-events-none w-0 h-0"
-          onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
-          onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
+          className="absolute opacity-0 pointer-events-none"
+          onTimeUpdate={() => onTimeUpdate(videoRef.current?.currentTime || 0)}
+          onDurationChange={() => onDurationChange(videoRef.current?.duration || 0)}
           onPlay={() => onPlayStateChange(true)}
           onPause={() => onPlayStateChange(false)}
           onEnded={() => onPlayStateChange(false)}
-          onLoadedData={() => console.log("Video data loaded successfully!")}
           onError={handleVideoError}
           playsInline
         />
 
-        {!videoState.url ? (
-          <div className="text-gray-500 flex flex-col items-center">
-            <MonitorPlay size={48} className="mb-4 opacity-50" />
-            <p>Selecione um video para começar</p>
-          </div>
-        ) : videoError ? (
-            <div className="text-red-400 text-center p-4">
-                <p className="font-bold mb-2">Error Loading Video</p>
-                <p className="text-sm">{videoError}</p>
+        {/* Rendering Canvas */}
+        <canvas
+          ref={canvasRef}
+          className="max-w-full max-h-full object-contain cursor-pointer touch-none select-none"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+        />
+        
+        {/* Error Overlay */}
+        {videoError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-50 p-6">
+                <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-6 max-w-md text-center">
+                    <p className="text-red-400 font-medium mb-2">Video Error</p>
+                    <p className="text-gray-300 text-sm">{videoError}</p>
+                </div>
             </div>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            className={`max-w-full max-h-full object-contain touch-none ${
-              isHoveringSubtitle || isDragging
-                ? "cursor-move"
-                : "cursor-pointer"
-            }`}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseLeave}
-          />
         )}
 
-        {/* Overlay Instruction for Dragging */}
-        {videoState.url &&
-          subtitles.length > 0 &&
-          !isDragging &&
-          !videoState.isPlaying && (
-            <div className="absolute top-4 right-4 bg-black/60 text-white text-xs px-2 py-1 rounded border border-white/20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 z-10">
-              <Move size={12} />
-              Arrastar Legenda
-            </div>
-          )}
-
-        {exportStatus === ExportStatus.RECORDING && (
-          <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 text-white">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2  mb-4"></div>
-            <p className="text-lg font-semibold">Renderizando Vídeo...</p>
-            <p className="text-sm text-gray-400">
-              Por favor aguarde o fim da reprodução.
-            </p>
+        {/* Loading / No Video State */}
+        {!videoState.url && !videoError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-4">
+             <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
+                <MonitorPlay size={32} className="opacity-50" />
+             </div>
+             <p className="text-sm font-medium">Carregue um vídeo para começar</p>
           </div>
         )}
       </div>
 
       {/* Controls Bar */}
-      <div className="flex items-center justify-between bg-gray-900 p-4 rounded-lg border border-gray-800">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={togglePlay}
-            disabled={
-              !videoState.url || exportStatus === ExportStatus.RECORDING || !!videoError
-            }
-            className="p-3 bg-gray-800 rounded-full hover:bg-gray-700 disabled:opacity-50 text-white transition-colors"
-          >
-            {videoState.isPlaying ? <Pause size={20} /> : <Play size={20} />}
-          </button>
-          <div className="text-sm font-mono text-gray-400">
-            {secondsToSrtTime(videoState.currentTime).split(",")[0]} /{" "}
-            {secondsToSrtTime(videoState.duration).split(",")[0]}
+      <div className="h-14 bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-4 shrink-0 z-10">
+        <button
+          onClick={togglePlay}
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg shadow-blue-900/20"
+          disabled={!videoState.url}
+        >
+          {videoState.isPlaying ? (
+            <Pause size={20} fill="currentColor" />
+          ) : (
+            <Play size={20} fill="currentColor" className="ml-1" />
+          )}
+        </button>
+
+        <div className="flex-1 flex flex-col justify-center">
+          <div className="text-xs font-medium text-gray-400 mb-1 flex justify-between">
+            <span>{secondsToSrtTime(videoState.currentTime)}</span>
+            <span>{secondsToSrtTime(videoState.duration)}</span>
+          </div>
+          <div className="relative h-1.5 bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="absolute top-0 left-0 h-full bg-blue-500 rounded-full"
+              style={{
+                width: `${(videoState.currentTime / videoState.duration) * 100}%`,
+              }}
+            />
           </div>
         </div>
 
-        <div className="flex gap-3">
-          {downloadUrl && exportStatus === ExportStatus.COMPLETED && (
+        {downloadUrl && (
             <a
-              href={downloadUrl}
-              download={getDownloadFileName()}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium transition-colors animate-pulse"
+                href={downloadUrl}
+                download="video-legendado.webm"
+                className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium transition-colors animate-pulse"
             >
-              <Download size={18} />
-              Baixar Resultado
+                <Download size={14} />
+                Baixar
             </a>
-          )}
+        )}
 
-          <button
-            onClick={handleExport}
-            disabled={
-              !videoState.url || exportStatus === ExportStatus.RECORDING || !!videoError
-            }
-            className="flex items-center gap-2 px-4 py-2 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
-          >
-            {exportStatus === ExportStatus.RECORDING
-              ? "Processando..."
-              : "Renderizar & Baixar"}
-          </button>
-        </div>
+        {exportStatus === ExportStatus.IDLE && videoState.url && (
+            <button
+                onClick={handleExport}
+                className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded text-xs font-medium border border-gray-700 transition-colors"
+                title="Gravar e Baixar Vídeo"
+            >
+                <MonitorPlay size={14} />
+                Exportar
+            </button>
+        )}
+        
+        {exportStatus === ExportStatus.RECORDING && (
+             <div className="flex items-center gap-2 px-3 py-1.5 bg-red-900/30 text-red-400 rounded text-xs font-medium border border-red-900/50 animate-pulse">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                Gravando...
+            </div>
+        )}
       </div>
     </div>
   );
 };
+
+const getDownloadFileName = () => {
+    const now = new Date();
+    return `subcine_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.webm`;
+}

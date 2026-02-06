@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { ExportStatus } from './types';
 import { SubtitleList } from './components/SubtitleList';
+import { LooseTextList } from './components/LooseTextList';
 import { VideoPlayer } from './components/VideoPlayer';
 import { Timeline } from './components/Timeline';
 import { FindReplaceModal } from './components/FindReplaceModal';
 import { useGlossary } from './hooks/useGlossary';
 import { GlossaryModal } from './components/GlossaryModal';
-import { Upload, FileText, Film, Download, Trash2, Search, Book } from 'lucide-react';
+import { Upload, FileText, Film, Download, Trash2, Search, Book, Layers, AlignLeft } from 'lucide-react';
 import { useVideoPlayer } from './hooks/useVideoPlayer';
 import { useSubtitles } from './hooks/useSubtitles';
+import { useLooseTexts } from './hooks/useLooseTexts';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 const App: React.FC = () => {
@@ -45,6 +47,14 @@ const App: React.FC = () => {
     redo,
   } = useSubtitles(videoState.currentTime, rules);
 
+  const {
+    looseTexts,
+    addLooseText,
+    updateLooseText,
+    deleteLooseText,
+    downloadLooseTexts
+  } = useLooseTexts();
+
   const [fontSize, setFontSize] = useState<number>(11);
   const [outlineSize, setOutlineSize] = useState<number>(6);
   const [shadowSize, setShadowSize] = useState<number>(0);
@@ -52,6 +62,8 @@ const App: React.FC = () => {
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<number | null>(null);
+  
+  const [activeTab, setActiveTab] = useState<'subtitles' | 'looseTexts'>('subtitles');
 
 
   const handleSeek = (time: number) => {
@@ -231,6 +243,7 @@ const App: React.FC = () => {
           <VideoPlayer
             videoState={videoState}
             subtitles={subtitles}
+            looseTexts={looseTexts}
             exportStatus={exportStatus}
             fontSize={fontSize}
             outlineSize={outlineSize}
@@ -241,6 +254,7 @@ const App: React.FC = () => {
             onPlayStateChange={handlePlayStateChange}
             onExportStart={() => setExportStatus(ExportStatus.RECORDING)}
             onExportFinish={() => setExportStatus(ExportStatus.COMPLETED)}
+            onUpdateLooseText={updateLooseText}
           />
           
           <div className="mt-4 bg-black rounded-lg border border-gray-800 overflow-hidden">
@@ -254,26 +268,66 @@ const App: React.FC = () => {
         </div>
 
         {/* Right: Subtitle Editor */}
-        <div className="w-[400px] shrink-0 h-full border-l border-gray-800 bg-gray-900">
-          <SubtitleList
-            subtitles={subtitles}
-            currentTime={videoState.currentTime}
-            fontSize={fontSize}
-            onFontSizeChange={setFontSize}
-            outlineSize={outlineSize}
-            onOutlineSizeChange={setOutlineSize}
-            shadowSize={shadowSize}
-            onShadowSizeChange={setShadowSize}
-            letterSpacing={letterSpacing}
-            onLetterSpacingChange={setLetterSpacing}
-            onUpdateSubtitle={updateSubtitle}
-            onDeleteSubtitle={deleteSubtitle}
-            onAddSubtitle={addSubtitle}
-            onSeek={handleSeek}
-            onShiftAll={shiftAllSubtitles}
-            selectedSubtitleId={selectedSubtitleId}
-            onSelect={setSelectedSubtitleId}
-          />
+        <div className="w-[400px] shrink-0 h-full border-l border-gray-800 bg-gray-900 flex flex-col">
+          {/* Tabs */}
+          <div className="flex border-b border-gray-800 shrink-0">
+             <button 
+               className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'subtitles' ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/30'}`}
+               onClick={() => setActiveTab('subtitles')}
+             >
+               <AlignLeft size={16} />
+               Legendas
+             </button>
+             <button 
+               className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'looseTexts' ? 'text-blue-400 border-b-2 border-blue-400 bg-gray-800/50' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/30'}`}
+               onClick={() => setActiveTab('looseTexts')}
+             >
+               <Layers size={16} />
+               Textos Avulsos
+             </button>
+          </div>
+
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {activeTab === 'subtitles' ? (
+              <SubtitleList
+                subtitles={subtitles}
+                currentTime={videoState.currentTime}
+                fontSize={fontSize}
+                onFontSizeChange={setFontSize}
+                outlineSize={outlineSize}
+                onOutlineSizeChange={setOutlineSize}
+                shadowSize={shadowSize}
+                onShadowSizeChange={setShadowSize}
+                letterSpacing={letterSpacing}
+                onLetterSpacingChange={setLetterSpacing}
+                onUpdateSubtitle={updateSubtitle}
+                onDeleteSubtitle={deleteSubtitle}
+                onAddSubtitle={addSubtitle}
+                onSeek={handleSeek}
+                onShiftAll={shiftAllSubtitles}
+                selectedSubtitleId={selectedSubtitleId}
+                onSelect={setSelectedSubtitleId}
+              />
+            ) : (
+              <LooseTextList 
+                 looseTexts={looseTexts}
+                 currentTime={videoState.currentTime}
+                 onUpdateLooseText={updateLooseText}
+                 onDeleteLooseText={deleteLooseText}
+                 onDownloadLooseTexts={downloadLooseTexts}
+                 onAddLooseText={() => addLooseText({
+                     id: Date.now(),
+                     startTime: videoState.currentTime,
+                     endTime: videoState.currentTime + 3,
+                     text: 'Novo texto avulso',
+                     x: 0.5,
+                     y: 0.5,
+                     fontSize: fontSize || 11
+                 })}
+                 onSeek={handleSeek}
+              />
+            )}
+          </div>
         </div>
       </main>
     </div>
