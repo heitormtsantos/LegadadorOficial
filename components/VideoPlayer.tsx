@@ -501,7 +501,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (video.paused) video.play();
 
     const stream = canvas.captureStream(30);
-    const mediaRecorder = new MediaRecorder(stream, {
+    
+    // Tenta capturar o áudio do elemento de vídeo
+    let finalStream = stream;
+    try {
+        // @ts-ignore - captureStream/mozCaptureStream podem não estar na definição de tipos padrão
+        const videoStream = video.captureStream ? video.captureStream() : video.mozCaptureStream ? video.mozCaptureStream() : null;
+        if (videoStream) {
+            const audioTracks = videoStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                // Cria um novo stream combinando o vídeo do canvas e o áudio do elemento video
+                finalStream = new MediaStream([...stream.getVideoTracks(), ...audioTracks]);
+            }
+        }
+    } catch (e) {
+        console.warn("Não foi possível capturar o áudio do vídeo:", e);
+    }
+
+    const mediaRecorder = new MediaRecorder(finalStream, {
       mimeType: "video/webm;codecs=vp9",
       videoBitsPerSecond: 5000000 
     });
@@ -694,6 +711,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           onMouseLeave={handleMouseLeave}
         />
         
+        {/* Exporting Overlay */}
+        {exportStatus === ExportStatus.EXPORTING && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-6"></div>
+                <p className="text-white font-semibold text-lg animate-pulse">Exportando Vídeo...</p>
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded px-4 py-3 mt-4 max-w-sm text-center">
+                    <p className="text-yellow-200 text-sm font-medium">⚠️ IMPORTANTE</p>
+                    <p className="text-yellow-100/80 text-xs mt-1">
+                        Mantenha esta aba aberta e visível. A renderização é feita em tempo real e pode falhar se a aba for minimizada.
+                    </p>
+                </div>
+            </div>
+        )}
+
         {/* Error Overlay */}
         {videoError && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-50 p-6">
