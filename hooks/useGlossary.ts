@@ -81,6 +81,42 @@ export const useGlossary = () => {
     return { subtitles: newSubtitles, changesCount };
   }, [rules]);
 
+  const exportGlossary = useCallback(() => {
+    const element = document.createElement("a");
+    const file = new Blob([JSON.stringify(rules, null, 2)], {
+      type: "application/json",
+    });
+    element.href = URL.createObjectURL(file);
+    element.download = `glossary_${Date.now()}.json`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  }, [rules]);
+
+  const importGlossary = useCallback(async (file: File) => {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Arquivo de glossário inválido.");
+    }
+
+    const normalized: ReplacementRule[] = parsed
+      .map((item: any) => {
+        const find = String(item?.find ?? "").trim();
+        const replace = String(item?.replace ?? "").trim();
+        if (!find) return null;
+        return {
+          id: typeof item?.id === "string" && item.id ? item.id : crypto.randomUUID(),
+          find,
+          replace,
+          isActive: typeof item?.isActive === "boolean" ? item.isActive : true,
+        } satisfies ReplacementRule;
+      })
+      .filter(Boolean) as ReplacementRule[];
+
+    setRules(normalized);
+  }, []);
+
   return {
     rules,
     addRule,
@@ -88,5 +124,7 @@ export const useGlossary = () => {
     toggleRule,
     updateRule,
     applyRulesToSubtitles,
+    exportGlossary,
+    importGlossary,
   };
 };

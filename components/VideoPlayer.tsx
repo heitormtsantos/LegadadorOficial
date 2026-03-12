@@ -40,10 +40,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | null>(null);
 
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const downloadFileName = videoState.file?.name
+    ? `${videoState.file.name.replace(/\.[^/.]+$/, "")}.webm`
+    : "video.webm";
 
   // Subtitle Positioning State
   const [subtitlePos, setSubtitlePos] = useState({ x: 0.5, y: 0.85 });
@@ -712,7 +715,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         />
         
         {/* Exporting Overlay */}
-        {exportStatus === ExportStatus.EXPORTING && (
+        {/* {exportStatus === ExportStatus.RECORDING && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm">
                 <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-6"></div>
                 <p className="text-white font-semibold text-lg animate-pulse">Exportando Vídeo...</p>
@@ -723,7 +726,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     </p>
                 </div>
             </div>
-        )}
+        )} */}
 
         {/* Error Overlay */}
         {videoError && (
@@ -778,7 +781,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         {downloadUrl && (
             <a
                 href={downloadUrl}
-                download="video-legendado.webm"
+                download={downloadFileName}
                 className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium transition-colors animate-pulse"
             >
                 <Download size={14} />
@@ -807,8 +810,3 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     </div>
   );
 };
-
-const getDownloadFileName = () => {
-    const now = new Date();
-    return `subcine_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.webm`;
-}

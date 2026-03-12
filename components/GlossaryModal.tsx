@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Plus, Trash2, Save, ToggleLeft, ToggleRight, Book } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Plus, Trash2, Save, ToggleLeft, ToggleRight, Book, Download, Upload } from 'lucide-react';
 import { ReplacementRule } from '../types';
 
 interface GlossaryModalProps {
@@ -10,6 +10,8 @@ interface GlossaryModalProps {
   onRemoveRule: (id: string) => void;
   onToggleRule: (id: string) => void;
   onApplyRules: () => void;
+  onExportGlossary: () => void;
+  onImportGlossary: (file: File) => Promise<void>;
 }
 
 export const GlossaryModal: React.FC<GlossaryModalProps> = ({
@@ -20,9 +22,13 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({
   onRemoveRule,
   onToggleRule,
   onApplyRules,
+  onExportGlossary,
+  onImportGlossary,
 }) => {
   const [newFind, setNewFind] = useState('');
   const [newReplace, setNewReplace] = useState('');
+  const [importError, setImportError] = useState('');
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -52,6 +58,24 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({
         <p className="text-sm text-gray-400 mb-6">
           Defina regras para substituir nomes automaticamente em novos arquivos.
         </p>
+
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            try {
+              setImportError('');
+              await onImportGlossary(file);
+            } catch (err: any) {
+              setImportError(err?.message || 'Erro ao importar glossário.');
+            }
+          }}
+        />
 
         {/* Add New Rule Form */}
         <form onSubmit={handleAdd} className="flex gap-2 mb-6 p-4 bg-gray-800 rounded border border-gray-700">
@@ -125,8 +149,32 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({
           )}
         </div>
 
+        {importError && (
+          <div className="mb-4 text-sm text-red-300 bg-red-900/20 border border-red-900/50 rounded p-3">
+            {importError}
+          </div>
+        )}
+
         {/* Footer Actions */}
-        <div className="flex justify-end pt-4 border-t border-gray-800">
+        <div className="flex justify-between items-center pt-4 border-t border-gray-800">
+          <div className="flex gap-2">
+            <button
+              onClick={onExportGlossary}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded font-medium transition-colors border border-gray-700 text-sm"
+              title="Exportar glossário"
+            >
+              <Download size={16} />
+              Exportar
+            </button>
+            <button
+              onClick={() => importInputRef.current?.click()}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded font-medium transition-colors border border-gray-700 text-sm"
+              title="Importar glossário"
+            >
+              <Upload size={16} />
+              Importar
+            </button>
+          </div>
            <button
             onClick={() => {
                 onApplyRules();

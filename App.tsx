@@ -19,6 +19,8 @@ const App: React.FC = () => {
     addRule,
     removeRule,
     toggleRule,
+    exportGlossary,
+    importGlossary,
     applyRulesToSubtitles,
   } = useGlossary();
 
@@ -52,6 +54,7 @@ const App: React.FC = () => {
     addLooseText,
     updateLooseText,
     deleteLooseText,
+    clearLooseTexts,
     downloadLooseTexts
   } = useLooseTexts();
 
@@ -167,6 +170,8 @@ const App: React.FC = () => {
         onRemoveRule={removeRule}
         onToggleRule={toggleRule}
         onApplyRules={() => applyGlossaryToCurrent(rules)}
+        onExportGlossary={exportGlossary}
+        onImportGlossary={importGlossary}
       />
 
       {/* Header */}
@@ -314,6 +319,7 @@ const App: React.FC = () => {
                  currentTime={videoState.currentTime}
                  onUpdateLooseText={updateLooseText}
                  onDeleteLooseText={deleteLooseText}
+                 onClearLooseTexts={clearLooseTexts}
                  onDownloadLooseTexts={downloadLooseTexts}
                  onAddLooseText={() => addLooseText({
                      id: Date.now(),

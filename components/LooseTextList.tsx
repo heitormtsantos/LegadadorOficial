@@ -8,6 +8,7 @@ interface LooseTextListProps {
   currentTime: number;
   onUpdateLooseText: (id: number, updated: Partial<LooseText>) => void;
   onDeleteLooseText: (id: number) => void;
+  onClearLooseTexts: () => void;
   onAddLooseText: () => void;
   onDownloadLooseTexts: () => void;
   onSeek: (time: number) => void;
@@ -18,6 +19,7 @@ export const LooseTextList: React.FC<LooseTextListProps> = ({
   currentTime,
   onUpdateLooseText,
   onDeleteLooseText,
+  onClearLooseTexts,
   onAddLooseText,
   onDownloadLooseTexts,
   onSeek,
@@ -44,6 +46,19 @@ export const LooseTextList: React.FC<LooseTextListProps> = ({
       <div className="p-4 border-b border-gray-800 bg-gray-850 flex justify-between items-center">
         <h2 className="text-lg font-semibold text-white">Textos Avulsos</h2>
         <div className="flex gap-2">
+            <button
+            onClick={() => {
+              if (looseTexts.length === 0) return;
+              const confirmed = window.confirm('Apagar todos os textos avulsos?');
+              if (confirmed) onClearLooseTexts();
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-red-300 bg-red-900/20 border border-red-900/50 rounded hover:bg-red-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Apagar todos os textos avulsos"
+            disabled={looseTexts.length === 0}
+            >
+            <Trash2 size={14} />
+            Apagar tudo
+            </button>
             <button
             onClick={onDownloadLooseTexts}
             className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-300 bg-gray-800 border border-gray-700 rounded hover:bg-gray-700 transition-colors"
