@@ -253,6 +253,10 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
       }
   }, [applyGlossary, subtitles, commitToHistory]);
 
+  const setAllSubtitles = useCallback((newSubs: Subtitle[]) => {
+    commitToHistory(newSubs);
+  }, [commitToHistory]);
+
   return {
     subtitles,
     setSubtitles,
@@ -268,6 +272,7 @@ export const useSubtitles = (currentTime: number, glossaryRules?: ReplacementRul
     undo,
     redo,
     canUndo: historyIndex > 0,
-    canRedo: historyIndex < history.length - 1
+    canRedo: historyIndex < history.length - 1,
+    setAllSubtitles
   };
 };

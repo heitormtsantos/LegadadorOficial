@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Subtitle } from '../types';
 import { secondsToSrtTime, srtTimeToSeconds } from '../utils/srtHelper';
-import { Clock, Trash2, Plus, Type, ChevronLeft, ChevronRight, Timer, ArrowRight, Watch } from 'lucide-react';
+import { Clock, Trash2, Plus, Type, ChevronLeft, ChevronRight, Timer, ArrowRight, Watch, Languages, Loader2 } from 'lucide-react';
 
 interface SubtitleListProps {
   subtitles: Subtitle[];
@@ -21,6 +21,8 @@ interface SubtitleListProps {
   onShiftAll: (amount: number) => void;
   selectedSubtitleId: number | null;
   onSelect: (id: number) => void;
+  onTranslate: () => Promise<void>;
+  isTranslating: boolean;
 }
 
 export const SubtitleList: React.FC<SubtitleListProps> = ({
@@ -41,6 +43,8 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
   onShiftAll,
   selectedSubtitleId,
   onSelect,
+  onTranslate,
+  isTranslating,
 }) => {
   const activeSubtitleRef = useRef<HTMLDivElement>(null);
   const selectedSubtitleRef = useRef<HTMLDivElement>(null);
@@ -71,13 +75,28 @@ export const SubtitleList: React.FC<SubtitleListProps> = ({
       <div className="p-4 border-b border-gray-800 bg-gray-850 space-y-3">
         <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold text-white">Legendas</h2>
-            <button
-            onClick={onAddSubtitle}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-500 transition-colors"
-            >
-            <Plus size={14} />
-            Adicionar
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={onTranslate}
+                disabled={isTranslating || subtitles.length === 0}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-purple-600 rounded hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Traduzir legendas com Gemini"
+              >
+                {isTranslating ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Languages size={14} />
+                )}
+                Traduzir
+              </button>
+              <button
+                onClick={onAddSubtitle}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-500 transition-colors"
+              >
+                <Plus size={14} />
+                Adicionar
+              </button>
+            </div>
         </div>
         
         {/* Global Time Shift */}

@@ -7,11 +7,14 @@ import { Timeline } from './components/Timeline';
 import { FindReplaceModal } from './components/FindReplaceModal';
 import { useGlossary } from './hooks/useGlossary';
 import { GlossaryModal } from './components/GlossaryModal';
-import { Upload, FileText, Film, Download, Trash2, Search, Book, Layers, AlignLeft } from 'lucide-react';
+import { Upload, FileText, Film, Download, Trash2, Search, Book, Layers, AlignLeft, Key } from 'lucide-react';
 import { useVideoPlayer } from './hooks/useVideoPlayer';
 import { useSubtitles } from './hooks/useSubtitles';
 import { useLooseTexts } from './hooks/useLooseTexts';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { translateSubtitlesWithGemini } from './utils/geminiHelper';
+import { useApiKeys } from './hooks/useApiKeys';
+import { ApiKeyModal } from './components/ApiKeyModal';
 
 const App: React.FC = () => {
   const {
@@ -47,6 +50,7 @@ const App: React.FC = () => {
     shiftAllSubtitles,
     undo,
     redo,
+    setAllSubtitles,
   } = useSubtitles(videoState.currentTime, rules);
 
   const {
@@ -58,13 +62,24 @@ const App: React.FC = () => {
     downloadLooseTexts
   } = useLooseTexts();
 
+  const {
+    apiKeys,
+    activeKeyId,
+    addApiKey,
+    removeApiKey,
+    selectApiKey,
+    getActiveKey,
+  } = useApiKeys();
+
   const [fontSize, setFontSize] = useState<number>(11);
   const [outlineSize, setOutlineSize] = useState<number>(6);
   const [shadowSize, setShadowSize] = useState<number>(0);
   const [letterSpacing, setLetterSpacing] = useState<number>(0.15);
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<number | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
   
   const [activeTab, setActiveTab] = useState<'subtitles' | 'looseTexts'>('subtitles');
 
@@ -91,6 +106,28 @@ const App: React.FC = () => {
     const videoEl = document.querySelector('video');
     if (videoEl) {
       videoEl.currentTime += seconds;
+    }
+  };
+
+  const handleTranslate = async () => {
+    if (subtitles.length === 0) return;
+
+    const apiKey = getActiveKey();
+    if (!apiKey) {
+      alert('Por favor, configure uma chave da API Gemini primeiro.');
+      setIsApiKeyModalOpen(true);
+      return;
+    }
+
+    setIsTranslating(true);
+    try {
+      const translated = await translateSubtitlesWithGemini(subtitles, apiKey);
+      setAllSubtitles(translated);
+      alert('Tradução concluída com sucesso!');
+    } catch (error: any) {
+      alert(`Erro na tradução: ${error.message}`);
+    } finally {
+      setIsTranslating(false);
     }
   };
 
@@ -174,6 +211,16 @@ const App: React.FC = () => {
         onImportGlossary={importGlossary}
       />
 
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        apiKeys={apiKeys}
+        activeKeyId={activeKeyId}
+        onAddKey={addApiKey}
+        onRemoveKey={removeApiKey}
+        onSelectKey={selectApiKey}
+      />
+
       {/* Header */}
       <header className="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-2">
@@ -185,6 +232,15 @@ const App: React.FC = () => {
         
         <div className="flex gap-4">
           {/* Action Buttons */}
+          <button
+              onClick={() => setIsApiKeyModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-900/30 hover:bg-purple-900/50 text-purple-400 rounded-lg transition-colors text-sm border border-purple-900/50"
+              title="Gerenciar Chaves API Gemini"
+            >
+              <Key size={16} />
+              <span className="hidden sm:inline">Chaves API</span>
+          </button>
+
           <button
               onClick={() => setIsGlossaryOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 rounded-lg transition-colors text-sm border border-yellow-900/50"
@@ -312,6 +368,8 @@ const App: React.FC = () => {
                 onShiftAll={shiftAllSubtitles}
                 selectedSubtitleId={selectedSubtitleId}
                 onSelect={setSelectedSubtitleId}
+                onTranslate={handleTranslate}
+                isTranslating={isTranslating}
               />
             ) : (
               <LooseTextList 
