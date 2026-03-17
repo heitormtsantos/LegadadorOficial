@@ -3,8 +3,8 @@ import { generateSRT, parseSRT } from './srtHelper';
 
 const MODELS_TO_TRY = [
   'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent',
-  'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent',
-  'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
+  'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent',
+  'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent',
 ];
 
 export const translateSubtitlesWithGemini = async (
@@ -36,11 +36,10 @@ ${srtContent}
 
   for (const apiUrl of MODELS_TO_TRY) {
     try {
-      const response = await fetch(apiUrl, {
+      const response = await fetch(`${apiUrl}?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
           contents: [

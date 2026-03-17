@@ -9,11 +9,7 @@ export interface ApiKey {
 const STORAGE_KEY = 'subcine_gemini_api_keys';
 const ACTIVE_KEY_ID = 'subcine_active_gemini_key_id';
 
-const DEFAULT_KEYS: ApiKey[] = [
-  { id: 'default-1', name: 'Gemini Key 1', key: 'AIzaSyBxMGn9y2MyursTAgnKMo7I6FLLYDF32co' },
-  { id: 'default-2', name: 'Gemini Key 2', key: 'AIzaSyAbZqWY71p36xIvG-gDqa9-Lp1L5XNdkMA' },
-  { id: 'default-3', name: 'Gemini Key 3', key: 'AIzaSyBWo_HFZU1y6ZfyrQ-uB6QAQ5YicMjLvnE' },
-];
+
 
 export const useApiKeys = () => {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>(() => {
@@ -22,14 +18,12 @@ export const useApiKeys = () => {
       const parsed = saved ? JSON.parse(saved) : [];
       
       // Se não houver chaves salvas, retorna as chaves padrão
-      if (parsed.length === 0) {
-        return DEFAULT_KEYS;
-      }
+    
       
       return parsed;
     } catch (error) {
       console.error('Failed to parse API keys from local storage', error);
-      return DEFAULT_KEYS;
+      
     }
   });
 
@@ -38,7 +32,7 @@ export const useApiKeys = () => {
     // Se houver um ID salvo, verifica se ele existe nas chaves atuais
     if (savedActiveId) return savedActiveId;
     // Caso contrário, ativa a primeira chave por padrão
-    return DEFAULT_KEYS[0].id;
+    
   });
 
   useEffect(() => {
