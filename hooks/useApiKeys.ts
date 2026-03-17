@@ -32,7 +32,6 @@ export const useApiKeys = () => {
     // Se houver um ID salvo, verifica se ele existe nas chaves atuais
     if (savedActiveId) return savedActiveId;
     // Caso contrário, ativa a primeira chave por padrão
-    
   });
 
   useEffect(() => {
