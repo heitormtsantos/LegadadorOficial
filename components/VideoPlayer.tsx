@@ -59,6 +59,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     w: number;
     h: number;
   } | null>(null);
+  const subtitleAnchorRef = useRef<{ x: number; y: number } | null>(null);
 
   // Loose Text Dragging State
   const [draggingLooseTextId, setDraggingLooseTextId] = useState<number | null>(null);
@@ -224,25 +225,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const totalHeight = wrappedLines.length * lineHeight;
 
       let centerX = canvas.width * subtitlePos.x;
-      let bottomY = canvas.height * subtitlePos.y;
+      let anchorY = canvas.height * subtitlePos.y;
 
-      const padding = Math.max(20, canvas.width * 0.05);
+      const paddingX = Math.max(20, canvas.width * 0.05);
+      const paddingTop = Math.max(10, canvas.height * 0.05);
+      const paddingBottom = Math.max(6, calculatedFontSize * 0.35);
       const halfWidth = maxTextWidth / 2;
 
-      if (centerX - halfWidth < padding) {
-        centerX = halfWidth + padding;
-      } else if (centerX + halfWidth > canvas.width - padding) {
-        centerX = canvas.width - padding - halfWidth;
+      if (centerX - halfWidth < paddingX) {
+        centerX = halfWidth + paddingX;
+      } else if (centerX + halfWidth > canvas.width - paddingX) {
+        centerX = canvas.width - paddingX - halfWidth;
       }
 
-      if (bottomY - totalHeight < padding) {
-        bottomY = totalHeight + padding;
+      const anchorOffsetFromTop = (wrappedLines.length - 0.5) * lineHeight;
+      let bboxTopY = anchorY - anchorOffsetFromTop;
+
+      if (bboxTopY < paddingTop) {
+        anchorY = paddingTop + anchorOffsetFromTop;
+        bboxTopY = anchorY - anchorOffsetFromTop;
       }
-      if (bottomY > canvas.height - padding) {
-        bottomY = canvas.height - padding;
+      if (bboxTopY + totalHeight > canvas.height - paddingBottom) {
+        anchorY = canvas.height - paddingBottom - 0.5 * lineHeight;
+        bboxTopY = anchorY - anchorOffsetFromTop;
       }
 
-      const bboxTopY = bottomY - totalHeight;
       const touchPadding = calculatedFontSize * 0.8;
       subtitleRectRef.current = {
         x: centerX - halfWidth - touchPadding,
@@ -250,6 +257,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         w: maxTextWidth + touchPadding * 2,
         h: totalHeight + touchPadding * 2,
       };
+      subtitleAnchorRef.current = { x: centerX, y: anchorY };
 
       if (isDragging || isHoveringSubtitle) {
         ctx.save();
@@ -272,6 +280,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       });
     } else {
       subtitleRectRef.current = null;
+      subtitleAnchorRef.current = null;
     }
 
     // 3. Draw Loose Texts
@@ -608,8 +617,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         setIsDragging(true);
 
         const rect = subtitleRectRef.current;
-        const currentAnchorX = rect.x + rect.w / 2;
-        const currentAnchorY = rect.y + rect.h - rect.h * 0.1; 
+        const anchor = subtitleAnchorRef.current;
+        const currentAnchorX = anchor ? anchor.x : rect.x + rect.w / 2;
+        const currentAnchorY = anchor ? anchor.y : rect.y + rect.h / 2;
 
         setDragOffset({
           x: x - currentAnchorX,
